@@ -75,7 +75,7 @@ public static class RelicAndAbilityContentGenerator
             relic.name = assetName;
             relic.relicName = BuildRelicName(entry.sourceFolderName);
             relic.icon = entry.sprite;
-            ApplyDefaultStats(relic);
+            ApplyDefaultStats(relic, i);
             EditorUtility.SetDirty(relic);
             generatedCount++;
         }
@@ -161,15 +161,11 @@ public static class RelicAndAbilityContentGenerator
         Debug.Log($"[RelicCleanup] Removed non-thematic relic assets: {removed}");
     }
 
-    private static void ApplyDefaultStats(RelicData relic)
+    private static void ApplyDefaultStats(RelicData relic, int index)
     {
-        relic.maxHpMultiplier = 1f;
-        relic.moveSpeedMultiplier = 1f;
-        relic.damageMultiplier = 1f;
-        relic.cooldownMultiplier = 1f;
-        relic.projectileSpeedMultiplier = 1f;
-        relic.critChanceMultiplier = 1f;
-        relic.critDamageMultiplier = 1f;
+        int statCount = System.Enum.GetValues(typeof(RelicData.RelicStatType)).Length;
+        int randomIndex = Random.Range(0, Mathf.Max(1, statCount));
+        relic.boostedStat = (RelicData.RelicStatType)randomIndex;
     }
 
     private static List<string> GetRelicIconFolders()

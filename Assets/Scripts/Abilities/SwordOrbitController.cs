@@ -38,6 +38,7 @@ public class SwordOrbitController : MonoBehaviour
     private float swordOrbitAngle;
     private int learnedAbilityCount;
     private int unlockedSwordCount;
+    private float swordOrbitSpeedMultiplier = 1f;
 
     private void Awake()
     {
@@ -180,7 +181,7 @@ public class SwordOrbitController : MonoBehaviour
 
         if (!active) return;
 
-        swordOrbitAngle += swordOrbitSpeed * Time.deltaTime;
+        swordOrbitAngle += (swordOrbitSpeed * swordOrbitSpeedMultiplier) * Time.deltaTime;
         if (swordOrbitAngle >= 360f)
             swordOrbitAngle -= 360f;
 
@@ -191,6 +192,12 @@ public class SwordOrbitController : MonoBehaviour
         }
 
         DealSwordColliderContactDamage();
+    }
+
+    public void MultiplySwordOrbitSpeed(float multiplier)
+    {
+        float clamped = Mathf.Clamp(multiplier, 0.8f, 1.25f);
+        swordOrbitSpeedMultiplier *= clamped;
     }
 
     private void OnValidate()

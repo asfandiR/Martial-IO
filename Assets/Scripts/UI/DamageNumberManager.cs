@@ -17,6 +17,7 @@ public class DamageNumberManager : MonoBehaviour
 
     private readonly List<DamageNumber> active = new List<DamageNumber>(128);
     private readonly Stack<DamageNumber> pool = new Stack<DamageNumber>(128);
+    private Canvas rootCanvas;
 
     private void Awake()
     {
@@ -28,6 +29,7 @@ public class DamageNumberManager : MonoBehaviour
 
         Instance = this;
         if (worldCamera == null) worldCamera = Camera.main;
+        if (screenSpaceRoot != null) rootCanvas = screenSpaceRoot.GetComponentInParent<Canvas>();
     }
 
     private void Update()
@@ -76,7 +78,7 @@ public class DamageNumberManager : MonoBehaviour
         {
             dn.isScreenSpace = true;
             dn.rect.SetParent(screenSpaceRoot, false);
-            dn.startScreenPos = WorldToScreen(worldPosition);
+            dn.startScreenPos = WorldToAnchored(screenSpaceRoot, worldPosition);
             dn.rect.anchoredPosition = dn.startScreenPos;
         }
         else
@@ -94,6 +96,21 @@ public class DamageNumberManager : MonoBehaviour
     {
         if (worldCamera == null) worldCamera = Camera.main;
         return worldCamera != null ? (Vector2)worldCamera.WorldToScreenPoint(worldPos) : Vector2.zero;
+    }
+
+    private Vector2 WorldToAnchored(RectTransform root, Vector3 worldPos)
+    {
+        if (root == null) return WorldToScreen(worldPos);
+
+        Vector2 screenPos = WorldToScreen(worldPos);
+        Camera uiCamera = null;
+        if (rootCanvas != null && rootCanvas.renderMode != RenderMode.ScreenSpaceOverlay)
+            uiCamera = rootCanvas.worldCamera != null ? rootCanvas.worldCamera : worldCamera;
+
+        if (RectTransformUtility.ScreenPointToLocalPointInRectangle(root, screenPos, uiCamera, out Vector2 anchored))
+            return anchored;
+
+        return screenPos;
     }
 
     private DamageNumber CreateInstance()

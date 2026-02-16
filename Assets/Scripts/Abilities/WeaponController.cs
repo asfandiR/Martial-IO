@@ -83,6 +83,12 @@ public class WeaponController : MonoBehaviour
             swordController.AddSwordRadius(radiusDelta);
     }
 
+    public void MultiplySwordOrbitSpeed(float multiplier)
+    {
+        if (swordController != null)
+            swordController.MultiplySwordOrbitSpeed(multiplier);
+    }
+
     public void HandleAbilityLearned(AbilityData ability)
     {
         if (swordController != null)

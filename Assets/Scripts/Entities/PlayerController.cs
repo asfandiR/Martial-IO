@@ -26,12 +26,20 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private int maxXpGemChecks = 64;
     [SerializeField] private ParticleSystem xpPickupEffect;
 
+    [Header("Relic Pickup")]
+    [SerializeField] private float relicPickupRadius = 1.5f;
+    [SerializeField] private float relicMagnetRadius = 5.5f;
+    [SerializeField] private LayerMask relicMask;
+    [SerializeField] private int maxRelicChecks = 64;
+    [SerializeField] private bool useXpPickupEffectForRelics = true;
+
     public event Action<int> OnCollectXp;
 
     private float moveSpeedMultiplier = 1f;
     private HealthSystem health;
     private Rigidbody2D rb;
     private Collider2D[] xpGemHits;
+    private Collider2D[] relicHits;
     private Vector2 cachedInput;
 
     public float MoveSpeedMultiplier => moveSpeedMultiplier;
@@ -73,6 +81,7 @@ public class PlayerController : MonoBehaviour
             Debug.LogWarning("XP Pickup Effect reference is missing on PlayerController.");
 
         xpGemHits = new Collider2D[Mathf.Max(8, maxXpGemChecks)];
+        relicHits = new Collider2D[Mathf.Max(8, maxRelicChecks)];
     }
 
     private void OnEnable()
@@ -101,6 +110,7 @@ public class PlayerController : MonoBehaviour
             animator.SetFloat(RunHash, run);
 
         HandleXpGemsInRange();
+        HandleRelicsInRange();
     }
 
     private void FixedUpdate()
@@ -148,11 +158,13 @@ public class PlayerController : MonoBehaviour
     private void OnTriggerEnter2D(Collider2D other)
     {
         TryCollectXp(other);
+        TryCollectRelic(other);
     }
 
     private void OnTriggerEnter(Collider other)
     {
         TryCollectXp(other);
+        TryCollectRelic(other);
     }
 
     private void TryCollectXp(Component source)
@@ -199,6 +211,50 @@ public class PlayerController : MonoBehaviour
         }
     }
 
+    private void TryCollectRelic(Component source)
+    {
+        if (source == null) return;
+        var relic = source.GetComponentInParent<RelicPickup>();
+        if (relic == null) return;
+
+        if (useXpPickupEffectForRelics && xpPickupEffect != null)
+            xpPickupEffect.Play();
+
+        CollectRelic(relic);
+    }
+
+    private void HandleRelicsInRange()
+    {
+        float magnetRadius = Mathf.Max(relicPickupRadius, relicMagnetRadius);
+        int count = OverlapCircle(
+            transform.position,
+            magnetRadius,
+            relicHits,
+            GetRelicMask()
+        );
+
+        if (count <= 0) return;
+
+        float pickupSqr = relicPickupRadius * relicPickupRadius;
+
+        for (int i = 0; i < count; i++)
+        {
+            Collider2D col = relicHits[i];
+            if (col == null) continue;
+
+            RelicPickup relic = col.GetComponentInParent<RelicPickup>();
+            if (relic == null) continue;
+
+            Vector3 delta = relic.transform.position - transform.position;
+            delta.z = 0f;
+
+            if (delta.sqrMagnitude <= pickupSqr)
+                CollectRelic(relic);
+            else
+                relic.MagnetizeTo(transform, relicPickupRadius);
+        }
+    }
+
     private void CollectGem(XPGem gem)
     {
         if (gem == null) return;
@@ -208,9 +264,20 @@ public class PlayerController : MonoBehaviour
             OnCollectXp?.Invoke(value);
     }
 
+    private void CollectRelic(RelicPickup relic)
+    {
+        if (relic == null) return;
+        relic.Collect();
+    }
+
     private int GetXpGemMask()
     {
         return xpGemMask.value == 0 ? ~0 : xpGemMask.value;
+    }
+
+    private int GetRelicMask()
+    {
+        return relicMask.value == 0 ? ~0 : relicMask.value;
     }
 
     private static int OverlapCircle(Vector2 center, float radius, Collider2D[] buffer, int layerMask)

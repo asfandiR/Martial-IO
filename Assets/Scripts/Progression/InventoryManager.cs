@@ -6,9 +6,8 @@ using UnityEngine.SceneManagement;
 // Stores permanent relic inventory and applies passive relic effects.
 public class InventoryManager : MonoBehaviour
 {
-    [SerializeField] private List<RelicData> allRelics = new List<RelicData>(256);
-
     private const string SaveKey = "meta_relic_inventory_v1";
+    public const float BoostPercentPerRelic = 0.5f;
 
     [Serializable]
     private class InventorySaveData
@@ -24,6 +23,7 @@ public class InventoryManager : MonoBehaviour
     private readonly List<RelicData> ownedRelics = new List<RelicData>(128);
     private readonly HashSet<string> ownedRelicIdSet = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> runtimeAppliedRelicIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, RelicData> relicById = new Dictionary<string, RelicData>(StringComparer.OrdinalIgnoreCase);
 
     private int currentPlayerInstanceId = int.MinValue;
     private InventorySaveData saveData = new InventorySaveData();
@@ -39,7 +39,7 @@ public class InventoryManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
-        LoadRelicCatalogFromResourcesIfNeeded();
+        BuildRelicLookupFromResources();
         Load();
         RebuildOwnedRelicsFromSave();
         SceneManager.sceneLoaded += HandleSceneLoaded;
@@ -89,15 +89,23 @@ public class InventoryManager : MonoBehaviour
         return ownedRelicIdSet.Contains(relicId.Trim());
     }
 
-    public void RefreshKnownRelics(List<RelicData> relicCatalog)
+    public int GetOwnedCountForStat(RelicData.RelicStatType stat)
     {
-        allRelics.Clear();
-        if (relicCatalog != null)
-            allRelics.AddRange(relicCatalog);
+        int count = 0;
+        for (int i = 0; i < ownedRelics.Count; i++)
+        {
+            RelicData relic = ownedRelics[i];
+            if (relic == null) continue;
+            if (relic.boostedStat == stat)
+                count++;
+        }
 
-        RebuildOwnedRelicsFromSave();
-        TryApplyOwnedRelicsToCurrentPlayer(forceReapplyForCurrentPlayer: true);
-        OnInventoryChanged?.Invoke();
+        return count;
+    }
+
+    public float GetTotalBoostPercent(RelicData.RelicStatType stat)
+    {
+        return GetOwnedCountForStat(stat) * BoostPercentPerRelic;
     }
 
     public void WipeRelics()
@@ -112,10 +120,9 @@ public class InventoryManager : MonoBehaviour
         OnInventoryChanged?.Invoke();
     }
 
-    private void LoadRelicCatalogFromResourcesIfNeeded()
+    private void BuildRelicLookupFromResources()
     {
-        if (allRelics.Count > 0)
-            return;
+        relicById.Clear();
 
         RelicData[] loaded = Resources.LoadAll<RelicData>("Relics");
         if (loaded == null || loaded.Length == 0)
@@ -123,8 +130,13 @@ public class InventoryManager : MonoBehaviour
 
         for (int i = 0; i < loaded.Length; i++)
         {
-            if (loaded[i] != null)
-                allRelics.Add(loaded[i]);
+            RelicData relic = loaded[i];
+            if (relic == null) continue;
+
+            string id = GetRelicId(relic);
+            if (string.IsNullOrWhiteSpace(id)) continue;
+            if (!relicById.ContainsKey(id))
+                relicById.Add(id, relic);
         }
     }
 
@@ -164,15 +176,14 @@ public class InventoryManager : MonoBehaviour
 
     private RelicData FindRelicById(string relicId)
     {
-        for (int i = 0; i < allRelics.Count; i++)
-        {
-            RelicData relic = allRelics[i];
-            if (relic == null) continue;
-            if (string.Equals(GetRelicId(relic), relicId, StringComparison.OrdinalIgnoreCase))
-                return relic;
-        }
+        if (string.IsNullOrWhiteSpace(relicId))
+            return null;
 
-        return null;
+        if (relicById.Count == 0)
+            BuildRelicLookupFromResources();
+
+        relicById.TryGetValue(relicId.Trim(), out RelicData relic);
+        return relic;
     }
 
     private static string GetRelicId(RelicData relic)
@@ -236,30 +247,41 @@ public class InventoryManager : MonoBehaviour
         var health = player.GetComponent<HealthSystem>();
         var weapon = player.GetComponent<WeaponController>();
         var abilities = player.GetComponent<AbilityManager>();
+        float delta = BoostPercentPerRelic * 0.01f;
+        float upMultiplier = 1f + delta;
+        float cooldownMultiplier = 1f - delta;
 
-        if (health != null && relic.maxHpMultiplier > 1f)
-            health.SetMaxHp(Mathf.Max(1f, health.MaxHp * relic.maxHpMultiplier), refill: false);
-
-        if (relic.moveSpeedMultiplier != 1f)
-            player.MultiplyMoveSpeed(relic.moveSpeedMultiplier);
-
-        if (weapon != null)
+        switch (relic.boostedStat)
         {
-            if (relic.damageMultiplier != 1f)
-                weapon.MultiplyProjectileDamage(relic.damageMultiplier);
-
-            if (relic.projectileSpeedMultiplier != 1f)
-                weapon.MultiplyProjectileSpeed(relic.projectileSpeedMultiplier);
-
-            if (relic.critChanceMultiplier != 1f)
-                weapon.MultiplyCritChance(relic.critChanceMultiplier);
-
-            if (relic.critDamageMultiplier != 1f)
-                weapon.MultiplyCritMultiplier(relic.critDamageMultiplier);
+            case RelicData.RelicStatType.MaxHp:
+                if (health != null)
+                    health.SetMaxHp(Mathf.Max(1f, health.MaxHp * upMultiplier), refill: false);
+                break;
+            case RelicData.RelicStatType.SwordSpeed:
+                if (weapon != null)
+                    weapon.MultiplySwordOrbitSpeed(upMultiplier);
+                break;
+            case RelicData.RelicStatType.Damage:
+                if (weapon != null)
+                    weapon.MultiplyProjectileDamage(upMultiplier);
+                break;
+            case RelicData.RelicStatType.Cooldown:
+                if (abilities != null)
+                    abilities.MultiplyCooldown(Mathf.Max(0.1f, cooldownMultiplier));
+                break;
+            case RelicData.RelicStatType.ProjectileSpeed:
+                if (weapon != null)
+                    weapon.MultiplyProjectileSpeed(upMultiplier);
+                break;
+            case RelicData.RelicStatType.CritChance:
+                if (weapon != null)
+                    weapon.MultiplyCritChance(upMultiplier);
+                break;
+            case RelicData.RelicStatType.CritDamage:
+                if (weapon != null)
+                    weapon.MultiplyCritMultiplier(upMultiplier);
+                break;
         }
-
-        if (abilities != null && relic.cooldownMultiplier != 1f)
-            abilities.MultiplyCooldown(relic.cooldownMultiplier);
     }
 
     private void Save()

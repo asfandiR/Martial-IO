@@ -9,6 +9,7 @@ public class HealthSystem : MonoBehaviour, IDamageable
 {
     [SerializeField] private float maxHp = 10f;
     [SerializeField] private bool destroyOnDeath = false;
+    [SerializeField] private bool showDamageNumbers = true;
 
     public float MaxHp => maxHp;
     public float CurrentHp { get; private set; }
@@ -38,6 +39,8 @@ public class HealthSystem : MonoBehaviour, IDamageable
 
         CurrentHp = Mathf.Max(0f, CurrentHp - amount);
         OnDamage?.Invoke(amount);
+        if (showDamageNumbers && DamageNumberManager.Instance != null)
+            DamageNumberManager.Instance.SpawnDamage(GetDamageNumberPosition(), amount);
 
         if (CurrentHp <= 0f)
             Die();
@@ -66,5 +69,18 @@ public class HealthSystem : MonoBehaviour, IDamageable
     {
         IsDead = false;
         CurrentHp = Mathf.Clamp(hp, 1f, maxHp);
+    }
+
+    private Vector3 GetDamageNumberPosition()
+    {
+        Collider2D col2D = GetComponentInChildren<Collider2D>();
+        if (col2D != null)
+            return col2D.bounds.center;
+
+        Collider col3D = GetComponentInChildren<Collider>();
+        if (col3D != null)
+            return col3D.bounds.center;
+
+        return transform.position;
     }
 }

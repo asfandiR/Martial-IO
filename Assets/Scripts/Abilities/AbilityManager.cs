@@ -147,6 +147,7 @@ public class AbilityManager : MonoBehaviour
     public float GetDamageMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 0.9f;
 
         float baseMul = Mathf.Clamp(ability.damage, 0.8f, 1.25f);
         float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.35f);
@@ -156,6 +157,7 @@ public class AbilityManager : MonoBehaviour
     public float GetCooldownMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 1.1f;
 
         float baseMul = Mathf.Clamp(ability.cooldown, 0.85f, 1.2f);
         float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.35f);
@@ -165,6 +167,7 @@ public class AbilityManager : MonoBehaviour
     public float GetProjectileSpeedMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 0.9f;
 
         float normalized = ability.projectileSpeed / BaseProjectileSpeed;
         float soft = 1f + ((normalized - 1f) * projectileSpeedImpact);
@@ -175,6 +178,7 @@ public class AbilityManager : MonoBehaviour
     public float GetProjectileLifetimeMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 0.9f;
 
         float normalized = ability.projectileLifetime / BaseProjectileLifetime;
         float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
@@ -184,6 +188,7 @@ public class AbilityManager : MonoBehaviour
     public float GetCritChanceMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 0.85f;
 
         float normalized = ability.critChance / BaseCritChance;
         float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
@@ -193,6 +198,7 @@ public class AbilityManager : MonoBehaviour
     public float GetCritDamageMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 0.9f;
 
         float normalized = ability.critMultiplier / BaseCritMultiplier;
         float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
@@ -202,6 +208,7 @@ public class AbilityManager : MonoBehaviour
     public float GetPierceMultiplierForAbility(AbilityData ability)
     {
         if (ability == null) return 1f;
+        if (IsDebuffAbility(ability)) return 0.9f;
 
         float normalized = Mathf.Max(1f, ability.pierceCount);
         float soft = 1f + ((normalized - 1f) * 0.35f);
@@ -306,5 +313,15 @@ public class AbilityManager : MonoBehaviour
         cooldownTimers.Clear();
         for (int i = 0; i < abilities.Count; i++)
             cooldownTimers.Add(0f);
+    }
+
+    private static bool IsDebuffAbility(AbilityData ability)
+    {
+        if (ability == null || string.IsNullOrWhiteSpace(ability.abilityName))
+            return false;
+
+        string name = ability.abilityName;
+        return name.IndexOf("DeBuff skill", StringComparison.OrdinalIgnoreCase) >= 0
+            || name.IndexOf("Debuff skill", StringComparison.OrdinalIgnoreCase) >= 0;
     }
 }
