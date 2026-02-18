@@ -10,10 +10,12 @@ public class HealthSystem : MonoBehaviour, IDamageable
     [SerializeField] private float maxHp = 10f;
     [SerializeField] private bool destroyOnDeath = false;
     [SerializeField] private bool showDamageNumbers = true;
+    [SerializeField] private float incomingFlatDamageReduction = 0f;
 
     public float MaxHp => maxHp;
     public float CurrentHp { get; private set; }
     public bool IsDead { get; private set; }
+    public float IncomingFlatDamageReduction => incomingFlatDamageReduction;
 
     public event Action<float> OnDamage;
     public event Action<float> OnHeal;
@@ -37,6 +39,9 @@ public class HealthSystem : MonoBehaviour, IDamageable
         if (IsDead) return;
         if (amount <= 0f) return;
 
+        amount = Mathf.Max(0f, amount - incomingFlatDamageReduction);
+        if (amount <= 0f) return;
+
         CurrentHp = Mathf.Max(0f, CurrentHp - amount);
         OnDamage?.Invoke(amount);
         if (showDamageNumbers && DamageNumberManager.Instance != null)
@@ -53,6 +58,11 @@ public class HealthSystem : MonoBehaviour, IDamageable
 
         CurrentHp = Mathf.Min(maxHp, CurrentHp + amount);
         OnHeal?.Invoke(amount);
+    }
+
+    public void SetIncomingFlatDamageReduction(float amount)
+    {
+        incomingFlatDamageReduction = Mathf.Max(0f, amount);
     }
 
     private void Die()

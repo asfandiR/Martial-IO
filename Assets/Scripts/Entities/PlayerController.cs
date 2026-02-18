@@ -33,6 +33,13 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private int maxRelicChecks = 64;
     [SerializeField] private bool useXpPickupEffectForRelics = true;
 
+    [Header("Effector Pickup")]
+    [SerializeField] private float effectorPickupRadius = 1.5f;
+    [SerializeField] private float effectorMagnetRadius = 5.5f;
+    [SerializeField] private LayerMask effectorMask;
+    [SerializeField] private int maxEffectorChecks = 64;
+    [SerializeField] private bool useXpPickupEffectForEffectors = true;
+
     public event Action<int> OnCollectXp;
 
     private float moveSpeedMultiplier = 1f;
@@ -40,6 +47,7 @@ public class PlayerController : MonoBehaviour
     private Rigidbody2D rb;
     private Collider2D[] xpGemHits;
     private Collider2D[] relicHits;
+    private Collider2D[] effectorHits;
     private Vector2 cachedInput;
 
     public float MoveSpeedMultiplier => moveSpeedMultiplier;
@@ -82,6 +90,7 @@ public class PlayerController : MonoBehaviour
 
         xpGemHits = new Collider2D[Mathf.Max(8, maxXpGemChecks)];
         relicHits = new Collider2D[Mathf.Max(8, maxRelicChecks)];
+        effectorHits = new Collider2D[Mathf.Max(8, maxEffectorChecks)];
     }
 
     private void OnEnable()
@@ -111,6 +120,7 @@ public class PlayerController : MonoBehaviour
 
         HandleXpGemsInRange();
         HandleRelicsInRange();
+        HandleEffectorsInRange();
     }
 
     private void FixedUpdate()
@@ -159,12 +169,14 @@ public class PlayerController : MonoBehaviour
     {
         TryCollectXp(other);
         TryCollectRelic(other);
+        TryCollectEffector(other);
     }
 
     private void OnTriggerEnter(Collider other)
     {
         TryCollectXp(other);
         TryCollectRelic(other);
+        TryCollectEffector(other);
     }
 
     private void TryCollectXp(Component source)
@@ -270,6 +282,56 @@ public class PlayerController : MonoBehaviour
         relic.Collect();
     }
 
+    private void TryCollectEffector(Component source)
+    {
+        if (source == null) return;
+        var effector = source.GetComponentInParent<EffectorPickup>();
+        if (effector == null) return;
+
+        if (useXpPickupEffectForEffectors && xpPickupEffect != null)
+            xpPickupEffect.Play();
+
+        CollectEffector(effector);
+    }
+
+    private void HandleEffectorsInRange()
+    {
+        float magnetRadius = Mathf.Max(effectorPickupRadius, effectorMagnetRadius);
+        int count = OverlapCircle(
+            transform.position,
+            magnetRadius,
+            effectorHits,
+            GetEffectorMask()
+        );
+
+        if (count <= 0) return;
+
+        float pickupSqr = effectorPickupRadius * effectorPickupRadius;
+
+        for (int i = 0; i < count; i++)
+        {
+            Collider2D col = effectorHits[i];
+            if (col == null) continue;
+
+            EffectorPickup effector = col.GetComponentInParent<EffectorPickup>();
+            if (effector == null) continue;
+
+            Vector3 delta = effector.transform.position - transform.position;
+            delta.z = 0f;
+
+            if (delta.sqrMagnitude <= pickupSqr)
+                CollectEffector(effector);
+            else
+                effector.MagnetizeTo(transform, effectorPickupRadius);
+        }
+    }
+
+    private void CollectEffector(EffectorPickup effector)
+    {
+        if (effector == null) return;
+        effector.Collect(gameObject);
+    }
+
     private int GetXpGemMask()
     {
         return xpGemMask.value == 0 ? ~0 : xpGemMask.value;
@@ -278,6 +340,11 @@ public class PlayerController : MonoBehaviour
     private int GetRelicMask()
     {
         return relicMask.value == 0 ? ~0 : relicMask.value;
+    }
+
+    private int GetEffectorMask()
+    {
+        return effectorMask.value == 0 ? ~0 : effectorMask.value;
     }
 
     private static int OverlapCircle(Vector2 center, float radius, Collider2D[] buffer, int layerMask)

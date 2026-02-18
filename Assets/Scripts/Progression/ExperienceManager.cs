@@ -19,7 +19,6 @@ public class ExperienceManager : MonoBehaviour
     public event Action<int> OnLevelUp;
     public event Action<int, int> OnXpChanged;
     private PlayerController playerController;
-    private HealthSystem playerHealth;
 
     private void Awake()
     {
@@ -51,7 +50,6 @@ public class ExperienceManager : MonoBehaviour
             CurrentXp -= XpToNext;
             CurrentLevel += 1;
             XpToNext = CalculateXpToNext(CurrentLevel);
-            RestorePlayerHealthOnLevelUp();
             OnLevelUp?.Invoke(CurrentLevel);
 
             if (pauseGameOnLevelUp && GameManager.Instance != null)
@@ -80,19 +78,6 @@ public class ExperienceManager : MonoBehaviour
 
         playerController = UnityEngine.Object.FindFirstObjectByType<PlayerController>();
         if (playerController != null)
-        {
             playerController.OnCollectXp += AddXp;
-            playerHealth = playerController.GetComponent<HealthSystem>();
-        }
-    }
-
-    private void RestorePlayerHealthOnLevelUp()
-    {
-        if (playerHealth == null)
-            TryBindPlayer();
-        if (playerHealth == null) return;
-
-        // Full restore on level up.
-        playerHealth.Heal(playerHealth.MaxHp);
     }
 }
