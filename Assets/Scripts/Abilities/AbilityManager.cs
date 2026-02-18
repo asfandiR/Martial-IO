@@ -9,6 +9,28 @@ using UnityEngine;
 // - Trigger ability use
 public class AbilityManager : MonoBehaviour
 {
+    private enum AbilityStat
+    {
+        Damage,
+        Cooldown,
+        ProjectileSpeed,
+        ProjectileLifetime,
+        CritChance,
+        CritDamage,
+        Pierce
+    }
+
+    private static readonly AbilityStat[] AllStats =
+    {
+        AbilityStat.Damage,
+        AbilityStat.Cooldown,
+        AbilityStat.ProjectileSpeed,
+        AbilityStat.ProjectileLifetime,
+        AbilityStat.CritChance,
+        AbilityStat.CritDamage,
+        AbilityStat.Pierce
+    };
+
     [SerializeField] private List<AbilityData> abilities = new List<AbilityData>(8);
     private readonly List<float> cooldownTimers = new List<float>(8);
 
@@ -27,7 +49,6 @@ public class AbilityManager : MonoBehaviour
     [SerializeField, Range(0.05f, 0.15f)] private float legendaryMaxGrowth = 0.15f;
 
     [Header("Balance")]
-    [SerializeField, Range(0f, 1f)] private float projectileSpeedImpact = 0.15f;
     [SerializeField, Range(0f, 1f)] private float playerSpeedImpact = 0.08f;
 
     private PlayerController playerController;
@@ -35,11 +56,6 @@ public class AbilityManager : MonoBehaviour
     private ExperienceManager experienceManager;
     private float cooldownMultiplier = 1f;
     [SerializeField] private float swordSectorBonusPerSkill = 15f;
-
-    private const float BaseProjectileSpeed = 10f;
-    private const float BaseProjectileLifetime = 3f;
-    private const float BaseCritChance = 0.1f;
-    private const float BaseCritMultiplier = 2f;
 
     public IReadOnlyList<AbilityData> Abilities => abilities;
     public float CooldownMultiplier => cooldownMultiplier;
@@ -146,74 +162,37 @@ public class AbilityManager : MonoBehaviour
 
     public float GetDamageMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 0.9f;
-
-        float baseMul = Mathf.Clamp(ability.damage, 0.8f, 1.25f);
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.35f);
-        return baseMul * levelMul;
+        return GetAbilityStatMultiplier(ability, AbilityStat.Damage);
     }
 
     public float GetCooldownMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 1.1f;
-
-        float baseMul = Mathf.Clamp(ability.cooldown, 0.85f, 1.2f);
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.35f);
-        return Mathf.Clamp(baseMul / levelMul, 0.75f, 1.2f);
+        return GetAbilityStatMultiplier(ability, AbilityStat.Cooldown);
     }
 
     public float GetProjectileSpeedMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 0.9f;
-
-        float normalized = ability.projectileSpeed / BaseProjectileSpeed;
-        float soft = 1f + ((normalized - 1f) * projectileSpeedImpact);
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
-        return Mathf.Clamp(soft * levelMul, 0.95f, 1.2f);
+        return GetAbilityStatMultiplier(ability, AbilityStat.ProjectileSpeed);
     }
 
     public float GetProjectileLifetimeMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 0.9f;
-
-        float normalized = ability.projectileLifetime / BaseProjectileLifetime;
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
-        return Mathf.Clamp(normalized * levelMul, 0.85f, 1.35f);
+        return GetAbilityStatMultiplier(ability, AbilityStat.ProjectileLifetime);
     }
 
     public float GetCritChanceMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 0.85f;
-
-        float normalized = ability.critChance / BaseCritChance;
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
-        return Mathf.Clamp(normalized * levelMul, 0.8f, 1.5f);
+        return GetAbilityStatMultiplier(ability, AbilityStat.CritChance);
     }
 
     public float GetCritDamageMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 0.9f;
-
-        float normalized = ability.critMultiplier / BaseCritMultiplier;
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
-        return Mathf.Clamp(normalized * levelMul, 0.9f, 1.5f);
+        return GetAbilityStatMultiplier(ability, AbilityStat.CritDamage);
     }
 
     public float GetPierceMultiplierForAbility(AbilityData ability)
     {
-        if (ability == null) return 1f;
-        if (IsDebuffAbility(ability)) return 0.9f;
-
-        float normalized = Mathf.Max(1f, ability.pierceCount);
-        float soft = 1f + ((normalized - 1f) * 0.35f);
-        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.2f);
-        return Mathf.Clamp(soft * levelMul, 1f, 2f);
+        return GetAbilityStatMultiplier(ability, AbilityStat.Pierce);
     }
 
     private void ApplyAbilityPercentEffects(AbilityData ability)
@@ -231,6 +210,7 @@ public class AbilityManager : MonoBehaviour
         if (weaponController != null)
         {
             weaponController.MultiplyProjectileDamage(damageMul);
+            weaponController.MultiplySwordDamage(damageMul);
             weaponController.MultiplyProjectileSpeed(speedMul);
             weaponController.MultiplyProjectileLifetime(lifeMul);
             weaponController.MultiplyCritChance(critChanceMul);
@@ -262,14 +242,22 @@ public class AbilityManager : MonoBehaviour
 
         if (isDemon)
         {
-            if (weaponController != null) weaponController.MultiplyProjectileDamage(1.1f);
+            if (weaponController != null)
+            {
+                weaponController.MultiplyProjectileDamage(1.1f);
+                weaponController.MultiplySwordDamage(1.1f);
+            }
             if (playerController != null) playerController.MultiplyMoveSpeed(0.98f);
             return;
         }
 
         if (isDebuff)
         {
-            if (weaponController != null) weaponController.MultiplyProjectileDamage(0.95f);
+            if (weaponController != null)
+            {
+                weaponController.MultiplyProjectileDamage(0.95f);
+                weaponController.MultiplySwordDamage(0.95f);
+            }
             if (playerController != null) playerController.MultiplyMoveSpeed(0.98f);
             MultiplyCooldown(1.05f);
             return;
@@ -313,6 +301,102 @@ public class AbilityManager : MonoBehaviour
         cooldownTimers.Clear();
         for (int i = 0; i < abilities.Count; i++)
             cooldownTimers.Add(0f);
+    }
+
+    private float GetAbilityStatMultiplier(AbilityData ability, AbilityStat stat)
+    {
+        if (ability == null)
+            return 1f;
+
+        if (!HasBoostedStat(ability, stat))
+            return 1f;
+
+        float growth = Mathf.Max(0f, GetLevelGrowthPercent(ability));
+        float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.35f);
+        float delta = Mathf.Clamp(growth * levelMul, 0.01f, 0.35f);
+        bool debuff = IsDebuffAbility(ability);
+
+        if (stat == AbilityStat.Cooldown)
+        {
+            float cooldownMul = debuff ? 1f + delta : 1f - delta;
+            return Mathf.Clamp(cooldownMul, 0.65f, 1.35f);
+        }
+
+        float mul = debuff ? 1f - delta : 1f + delta;
+        return Mathf.Clamp(mul, 0.65f, 1.35f);
+    }
+
+    private bool HasBoostedStat(AbilityData ability, AbilityStat stat)
+    {
+        if (ability == null)
+            return false;
+
+        int statCount = AllStats.Length;
+        if (statCount == 0)
+            return false;
+
+        int targetCount = Mathf.Clamp(GetBoostedStatCountByRarity(ability.rarity), 1, statCount);
+        int seed = Mathf.Abs(GetStableHash(GetAbilityStableId(ability)));
+        int cursor = seed % statCount;
+        int step = (seed % (statCount - 1)) + 1;
+        bool[] selected = new bool[statCount];
+
+        for (int picked = 0; picked < targetCount; picked++)
+        {
+            int safety = 0;
+            while (selected[cursor] && safety < statCount)
+            {
+                cursor = (cursor + 1) % statCount;
+                safety++;
+            }
+
+            selected[cursor] = true;
+            if (AllStats[cursor] == stat)
+                return true;
+
+            cursor = (cursor + step) % statCount;
+        }
+
+        return false;
+    }
+
+    private static int GetBoostedStatCountByRarity(AbilityData.AbilityRarity rarity)
+    {
+        switch (rarity)
+        {
+            case AbilityData.AbilityRarity.Rare:
+                return 2;
+            case AbilityData.AbilityRarity.Epic:
+                return 3;
+            case AbilityData.AbilityRarity.Legendary:
+                return 4;
+            default:
+                return 1;
+        }
+    }
+
+    private static string GetAbilityStableId(AbilityData ability)
+    {
+        if (ability == null)
+            return string.Empty;
+
+        string name = string.IsNullOrWhiteSpace(ability.abilityName) ? ability.name : ability.abilityName;
+        string iconName = ability.icon != null ? ability.icon.name : "none";
+        return $"{name}|{ability.rarity}|{iconName}";
+    }
+
+    private static int GetStableHash(string value)
+    {
+        if (string.IsNullOrEmpty(value))
+            return 0;
+
+        unchecked
+        {
+            int hash = 23;
+            for (int i = 0; i < value.Length; i++)
+                hash = (hash * 31) + value[i];
+            return hash;
+        }
     }
 
     private static bool IsDebuffAbility(AbilityData ability)

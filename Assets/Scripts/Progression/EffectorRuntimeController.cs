@@ -133,7 +133,10 @@ public class EffectorRuntimeController : MonoBehaviour
         {
             case EffectorSO.BoostedStat.X2Damage:
                 if (weapon != null)
+                {
                     weapon.MultiplyProjectileDamage(buff.multiplier);
+                    weapon.MultiplySwordDamage(buff.multiplier);
+                }
                 break;
             case EffectorSO.BoostedStat.HalfCooldown:
                 if (abilities != null)
@@ -160,7 +163,10 @@ public class EffectorRuntimeController : MonoBehaviour
         {
             float inverse = buff.multiplier <= 0.0001f ? 1f : 1f / buff.multiplier;
             if (weapon != null)
+            {
                 weapon.MultiplyProjectileDamage(inverse);
+                weapon.MultiplySwordDamage(inverse);
+            }
             return;
         }
 

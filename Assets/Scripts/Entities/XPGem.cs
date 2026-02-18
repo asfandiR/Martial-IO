@@ -8,22 +8,34 @@ public class XPGem : MonoBehaviour
     [SerializeField] private float magnetStartSpeed = 2.5f;
     [SerializeField] private float magnetAcceleration = 20f;
     [SerializeField] private float maxMagnetSpeed = 12f;
+    [Header("Lifetime")]
+    [SerializeField] private float despawnAfterSeconds = 20f;
 
     private Transform magnetTarget;
     private float collectDistance = 1f;
     private float magnetSpeed;
     private bool collected;
+    private float despawnAtTime;
+    private bool hasDespawnTimer;
 
     private void OnEnable()
     {
         collected = false;
         magnetTarget = null;
         magnetSpeed = magnetStartSpeed;
+        SetDespawnTimer(despawnAfterSeconds);
     }
 
     private void Update()
     {
         if (collected) return;
+
+        if (hasDespawnTimer && Time.time >= despawnAtTime)
+        {
+            ReturnToPoolOrDestroy();
+            return;
+        }
+
         if (magnetTarget == null) return;
 
         Vector3 toTarget = magnetTarget.position - transform.position;
@@ -44,6 +56,19 @@ public class XPGem : MonoBehaviour
         transform.position = Vector3.MoveTowards(transform.position, magnetTarget.position, step);
     }
 
+    public void SetDespawnTimer(float seconds)
+    {
+        if (seconds <= 0f)
+        {
+            hasDespawnTimer = false;
+            despawnAtTime = 0f;
+            return;
+        }
+
+        hasDespawnTimer = true;
+        despawnAtTime = Time.time + seconds;
+    }
+
     public void MagnetizeTo(Transform target, float pickupRadius)
     {
         if (collected) return;
@@ -59,12 +84,16 @@ public class XPGem : MonoBehaviour
         collected = true;
 
         int result = Mathf.Max(0, value);
+        ReturnToPoolOrDestroy();
 
+        return result;
+    }
+
+    private void ReturnToPoolOrDestroy()
+    {
         if (ObjectPooler.Instance != null)
             ObjectPooler.Instance.ReturnToPool(gameObject);
         else
             Destroy(gameObject);
-
-        return result;
     }
 }

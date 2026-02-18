@@ -41,6 +41,12 @@ public class WeaponController : MonoBehaviour
             projectileController.MultiplyProjectileDamage(multiplier);
     }
 
+    public void MultiplySwordDamage(float multiplier)
+    {
+        if (swordController != null)
+            swordController.MultiplySwordDamage(multiplier);
+    }
+
     public void MultiplyProjectileSpeed(float multiplier)
     {
         if (projectileController != null)

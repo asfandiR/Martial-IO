@@ -263,7 +263,10 @@ public class InventoryManager : MonoBehaviour
                 break;
             case RelicData.RelicStatType.Damage:
                 if (weapon != null)
+                {
                     weapon.MultiplyProjectileDamage(upMultiplier);
+                    weapon.MultiplySwordDamage(upMultiplier);
+                }
                 break;
             case RelicData.RelicStatType.Cooldown:
                 if (abilities != null)

@@ -12,12 +12,13 @@ public class SwordOrbitController : MonoBehaviour
         public SpriteRenderer renderer;
         public Collider2D collider;
     }
-
+private string anim="Change";
     [Header("Sword")]
     [SerializeField] private bool swordEnabled = true;
     [SerializeField] private float swordDamage = 2f;
     [SerializeField] private Transform swordOrbitRoot;
     [SerializeField] private Transform[] swordTransforms = new Transform[8];
+    [SerializeField] private Animator[] Animators = new Animator[8];
     [SerializeField] private SwordDateBase swordDateBase;
     [SerializeField] private float swordOrbitSpeed = 180f;
     [SerializeField] private float swordTouchDamageInterval = 0.2f;
@@ -39,6 +40,7 @@ public class SwordOrbitController : MonoBehaviour
     private int learnedAbilityCount;
     private int unlockedSwordCount;
     private float swordOrbitSpeedMultiplier = 1f;
+    private float swordDamageMultiplier = 1f;
 
     private void Awake()
     {
@@ -117,6 +119,8 @@ public class SwordOrbitController : MonoBehaviour
             if (sprite != null)
                 orbiter.renderer.sprite = sprite;
             orbiter.renderer.color = color;
+            if (Animators != null)
+            Animators[i].SetTrigger(anim);
         }
 
         learnedAbilityCount++;
@@ -200,6 +204,11 @@ public class SwordOrbitController : MonoBehaviour
         swordOrbitSpeedMultiplier *= clamped;
     }
 
+    public void MultiplySwordDamage(float multiplier)
+    {
+        swordDamageMultiplier *= Mathf.Max(0.1f, multiplier);
+    }
+
     private void OnValidate()
     {
         if (swordTransforms == null) return;
@@ -238,7 +247,7 @@ public class SwordOrbitController : MonoBehaviour
                 var damageable = col.GetComponentInParent<IDamageable>();
                 if (damageable == null) continue;
 
-                damageable.TakeDamage(swordDamage);
+                damageable.TakeDamage(swordDamage * swordDamageMultiplier);
                 swordHitTimers[key] = Mathf.Max(0.05f, swordTouchDamageInterval);
             }
         }

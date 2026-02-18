@@ -139,7 +139,7 @@ public class ProjectileAttackController : MonoBehaviour
     private void FireWithCurrentMultiShot(AbilityData ability, Transform target)
     {
         var abilities = abilityManager.Abilities;
-        int projectileSkillCount = CountProjectileSkills(abilities);
+        int projectileSkillCount = CountDistinctProjectileFamilies(abilities);
         int multiShotLevel = GetMultiShotLevel(abilities);
         int projectileCount = GetProjectileCount(projectileSkillCount, multiShotLevel);
 
@@ -174,17 +174,20 @@ public class ProjectileAttackController : MonoBehaviour
     private int GetMultiShotLevel(IReadOnlyList<AbilityData> abilities)
     {
         int level = 0;
+        bool[] familySeen = new bool[projectileAbilityTokens.Length];
 
         for (int i = 0; i < abilities.Count; i++)
         {
             AbilityData ability = abilities[i];
             if (ability == null || ability.projectilePrefab == null) continue;
-            if (!IsProjectileAbility(ability)) continue;
+            int tokenIndex = GetProjectileTokenIndex(ability.abilityName);
+            if (tokenIndex < 0 || familySeen[tokenIndex]) continue;
 
             if (ability.rarity == AbilityData.AbilityRarity.Rare
                 || ability.rarity == AbilityData.AbilityRarity.Epic
                 || ability.rarity == AbilityData.AbilityRarity.Legendary)
             {
+                familySeen[tokenIndex] = true;
                 level++;
             }
         }
@@ -192,38 +195,40 @@ public class ProjectileAttackController : MonoBehaviour
         return Mathf.Clamp(level, 0, Mathf.Max(0, maxMultiShotLevel));
     }
 
-    private int CountProjectileSkills(IReadOnlyList<AbilityData> abilities)
+    private int CountDistinctProjectileFamilies(IReadOnlyList<AbilityData> abilities)
     {
         int count = 0;
+        bool[] familySeen = new bool[projectileAbilityTokens.Length];
 
         for (int i = 0; i < abilities.Count; i++)
         {
             AbilityData ability = abilities[i];
             if (ability == null || ability.projectilePrefab == null) continue;
-            if (!IsProjectileAbility(ability)) continue;
+            int tokenIndex = GetProjectileTokenIndex(ability.abilityName);
+            if (tokenIndex < 0 || familySeen[tokenIndex]) continue;
+
+            familySeen[tokenIndex] = true;
             count++;
         }
 
         return count;
     }
 
-    private bool IsProjectileAbility(AbilityData ability)
+    private int GetProjectileTokenIndex(string abilityName)
     {
-        if (ability == null || string.IsNullOrWhiteSpace(ability.abilityName))
-            return false;
-
-        string name = ability.abilityName;
+        if (string.IsNullOrWhiteSpace(abilityName))
+            return -1;
 
         for (int i = 0; i < projectileAbilityTokens.Length; i++)
         {
             string token = projectileAbilityTokens[i];
             if (string.IsNullOrWhiteSpace(token)) continue;
 
-            if (name.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
-                return true;
+            if (abilityName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+                return i;
         }
 
-        return false;
+        return -1;
     }
 
     private Vector3[] BuildMultiShotDirections(int projectileCount, Vector3 facingDirection, Transform target)

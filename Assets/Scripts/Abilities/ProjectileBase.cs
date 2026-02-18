@@ -7,6 +7,9 @@
 // - Lifetime
 public class ProjectileBase : MonoBehaviour
 {
+    [Header("Safety Lifetime")]
+    [SerializeField] private float fallbackLifetimeSeconds = 5f;
+
     private float speed;
     private float damage;
     private float critChance;
@@ -24,6 +27,12 @@ public class ProjectileBase : MonoBehaviour
     private float pierceMultiplier = 1f;
 
     private Vector3 moveDirection = Vector3.right;
+
+    private void OnEnable()
+    {
+        lifeTimer = 0f;
+        lifetime = Mathf.Max(0.1f, fallbackLifetimeSeconds);
+    }
 
     public void SetCombatMultipliers(
         float damageMul,
