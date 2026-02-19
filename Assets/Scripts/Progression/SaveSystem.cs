@@ -8,21 +8,40 @@ using UnityEngine;
 public class SaveSystem : MonoBehaviour
 {
     private const string SaveKey = "meta_save_v1";
+    public static SaveSystem Instance { get; private set; }
+
+    [SerializeField] private bool cleanPrefs = false;
 
     [System.Serializable]
     private class SaveData
     {
         public int gold;
+        public int bestScore;
         public List<string> purchasedUpgrades = new List<string>();
+        public List<string> ownedRelicIds = new List<string>();
     }
 
     public int Gold => data.gold;
+    public int BestScore => data.bestScore;
 
     private SaveData data = new SaveData();
 
     private void Awake()
     {
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+
+        Instance = this;
         Load();
+    }
+
+    private void OnDestroy()
+    {
+        if (Instance == this)
+            Instance = null;
     }
 
     public void AddGold(int amount)
@@ -59,6 +78,38 @@ public class SaveSystem : MonoBehaviour
         return true;
     }
 
+    public bool TrySetBestScore(int score)
+    {
+        if (score <= data.bestScore) return false;
+        data.bestScore = score;
+        Save();
+        return true;
+    }
+
+    public bool AddOwnedRelicId(string relicId)
+    {
+        if (string.IsNullOrWhiteSpace(relicId)) return false;
+        relicId = relicId.Trim();
+
+        if (data.ownedRelicIds.Contains(relicId))
+            return false;
+
+        data.ownedRelicIds.Add(relicId);
+        Save();
+        return true;
+    }
+
+    public void ClearOwnedRelics()
+    {
+        data.ownedRelicIds.Clear();
+        Save();
+    }
+
+    public IReadOnlyList<string> GetOwnedRelicIds()
+    {
+        return data.ownedRelicIds;
+    }
+
     public void Save()
     {
         string json = JsonUtility.ToJson(data);
@@ -76,11 +127,23 @@ public class SaveSystem : MonoBehaviour
 
         string json = PlayerPrefs.GetString(SaveKey);
         data = JsonUtility.FromJson<SaveData>(json) ?? new SaveData();
+        if (data.purchasedUpgrades == null)
+            data.purchasedUpgrades = new List<string>();
+        if (data.ownedRelicIds == null)
+            data.ownedRelicIds = new List<string>();
     }
 
     public void Wipe()
     {
         data = new SaveData();
         PlayerPrefs.DeleteKey(SaveKey);
+    }
+    private void OnValidate()
+    {
+        if (cleanPrefs)
+        {
+            cleanPrefs = false;
+            Wipe();
+        }
     }
 }

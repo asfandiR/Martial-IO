@@ -55,6 +55,7 @@ public class AbilityManager : MonoBehaviour
     private WeaponController weaponController;
     private ExperienceManager experienceManager;
     private float cooldownMultiplier = 1f;
+    [SerializeField, Min(0f)] private float projectileCooldownBase = 2f;
     [SerializeField] private float swordSectorBonusPerSkill = 15f;
 
     public IReadOnlyList<AbilityData> Abilities => abilities;
@@ -114,9 +115,14 @@ public class AbilityManager : MonoBehaviour
         if (index < 0 || index >= abilities.Count) return false;
         if (!IsReady(index)) return false;
 
-        float cd = Mathf.Max(0f, cooldownMultiplier);
+        float cd = GetProjectileCooldownDuration();
         cooldownTimers[index] = cd;
         return true;
+    }
+
+    public float GetProjectileCooldownDuration()
+    {
+        return Mathf.Max(0f, projectileCooldownBase * cooldownMultiplier);
     }
 
     public bool HasAbilityNameToken(string token)
@@ -313,17 +319,17 @@ public class AbilityManager : MonoBehaviour
 
         float growth = Mathf.Max(0f, GetLevelGrowthPercent(ability));
         float levelMul = Mathf.Clamp(GetLevelScaleMultiplier(ability), 1f, 1.35f);
-        float delta = Mathf.Clamp(growth * levelMul, 0.01f, 0.35f);
+        float delta = Mathf.Clamp(growth * levelMul * 2f, 0.02f, 0.7f);
         bool debuff = IsDebuffAbility(ability);
 
         if (stat == AbilityStat.Cooldown)
         {
             float cooldownMul = debuff ? 1f + delta : 1f - delta;
-            return Mathf.Clamp(cooldownMul, 0.65f, 1.35f);
+            return Mathf.Clamp(cooldownMul, 0.3f, 1.7f);
         }
 
         float mul = debuff ? 1f - delta : 1f + delta;
-        return Mathf.Clamp(mul, 0.65f, 1.35f);
+        return Mathf.Clamp(mul, 0.3f, 1.7f);
     }
 
     private bool HasBoostedStat(AbilityData ability, AbilityStat stat)

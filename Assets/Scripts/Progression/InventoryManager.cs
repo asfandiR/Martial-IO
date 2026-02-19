@@ -6,14 +6,7 @@ using UnityEngine.SceneManagement;
 // Stores permanent relic inventory and applies passive relic effects.
 public class InventoryManager : MonoBehaviour
 {
-    private const string SaveKey = "meta_relic_inventory_v1";
     public const float BoostPercentPerRelic = 0.5f;
-
-    [Serializable]
-    private class InventorySaveData
-    {
-        public List<string> ownedRelicIds = new List<string>();
-    }
 
     public static InventoryManager Instance { get; private set; }
     public IReadOnlyList<RelicData> OwnedRelics => ownedRelics;
@@ -25,8 +18,8 @@ public class InventoryManager : MonoBehaviour
     private readonly HashSet<string> runtimeAppliedRelicIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, RelicData> relicById = new Dictionary<string, RelicData>(StringComparer.OrdinalIgnoreCase);
 
+    [SerializeField] private SaveSystem saveSystem;
     private int currentPlayerInstanceId = int.MinValue;
-    private InventorySaveData saveData = new InventorySaveData();
 
     private void Awake()
     {
@@ -39,8 +32,9 @@ public class InventoryManager : MonoBehaviour
         Instance = this;
         DontDestroyOnLoad(gameObject);
 
+        ResolveSaveSystem();
+
         BuildRelicLookupFromResources();
-        Load();
         RebuildOwnedRelicsFromSave();
         SceneManager.sceneLoaded += HandleSceneLoaded;
     }
@@ -68,8 +62,8 @@ public class InventoryManager : MonoBehaviour
 
         ownedRelicIdSet.Add(relicId);
         ownedRelics.Add(relic);
-        saveData.ownedRelicIds.Add(relicId);
-        Save();
+        ResolveSaveSystem();
+        saveSystem?.AddOwnedRelicId(relicId);
 
         ApplySingleRelicIfPossible(relic, relicId);
         OnInventoryChanged?.Invoke();
@@ -113,10 +107,8 @@ public class InventoryManager : MonoBehaviour
         ownedRelics.Clear();
         ownedRelicIdSet.Clear();
         runtimeAppliedRelicIds.Clear();
-        saveData = new InventorySaveData();
-
-        PlayerPrefs.DeleteKey(SaveKey);
-        PlayerPrefs.Save();
+        ResolveSaveSystem();
+        saveSystem?.ClearOwnedRelics();
         OnInventoryChanged?.Invoke();
     }
 
@@ -152,16 +144,15 @@ public class InventoryManager : MonoBehaviour
     {
         ownedRelics.Clear();
         ownedRelicIdSet.Clear();
+        ResolveSaveSystem();
 
-        if (saveData == null)
-            saveData = new InventorySaveData();
+        IReadOnlyList<string> savedRelicIds = saveSystem != null
+            ? saveSystem.GetOwnedRelicIds()
+            : Array.Empty<string>();
 
-        if (saveData.ownedRelicIds == null)
-            saveData.ownedRelicIds = new List<string>();
-
-        for (int i = 0; i < saveData.ownedRelicIds.Count; i++)
+        for (int i = 0; i < savedRelicIds.Count; i++)
         {
-            string id = saveData.ownedRelicIds[i];
+            string id = savedRelicIds[i];
             if (string.IsNullOrWhiteSpace(id)) continue;
             id = id.Trim();
 
@@ -255,7 +246,7 @@ public class InventoryManager : MonoBehaviour
         {
             case RelicData.RelicStatType.MaxHp:
                 if (health != null)
-                    health.SetMaxHp(Mathf.Max(1f, health.MaxHp * upMultiplier), refill: false);
+                    health.SetMaxHp(Mathf.Max(1f, health.MaxHp * (1f + delta * 4f)), refill: false);
                 break;
             case RelicData.RelicStatType.SwordSpeed:
                 if (weapon != null)
@@ -287,25 +278,9 @@ public class InventoryManager : MonoBehaviour
         }
     }
 
-    private void Save()
+    private void ResolveSaveSystem()
     {
-        if (saveData == null)
-            saveData = new InventorySaveData();
-
-        string json = JsonUtility.ToJson(saveData);
-        PlayerPrefs.SetString(SaveKey, json);
-        PlayerPrefs.Save();
-    }
-
-    private void Load()
-    {
-        if (!PlayerPrefs.HasKey(SaveKey))
-        {
-            saveData = new InventorySaveData();
-            return;
-        }
-
-        string json = PlayerPrefs.GetString(SaveKey);
-        saveData = JsonUtility.FromJson<InventorySaveData>(json) ?? new InventorySaveData();
+        if (saveSystem == null)
+            saveSystem = SaveSystem.Instance ?? FindFirstObjectByType<SaveSystem>();
     }
 }

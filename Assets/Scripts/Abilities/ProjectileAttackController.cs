@@ -36,10 +36,11 @@ public class ProjectileAttackController : MonoBehaviour
     private bool isFireButtonHeld;
     private float projectileDamageMultiplier = 1f;
     private float projectileSpeedMultiplier = 1f;
-    private float projectileLifetimeMultiplier = 1f;
+    private float projectileLifetimeMultiplier = 0.3f;
     private float critChanceMultiplier = 1f;
     private float critDamageMultiplier = 1f;
     private float pierceMultiplier = 1f;
+    private float nextGlobalFireTime;
 
     public float ProjectileDamageMultiplier => projectileDamageMultiplier;
     public float ProjectileSpeedMultiplier => projectileSpeedMultiplier;
@@ -61,19 +62,10 @@ public class ProjectileAttackController : MonoBehaviour
         if (abilityManager == null) return;
         if (!IsProjectileUnlocked()) return;
         if (useFireButton && !isFireButtonHeld) return;
+        if (Time.time < nextGlobalFireTime) return;
 
         Transform target = FindNearestTarget();
-        var abilities = abilityManager.Abilities;
-
-        for (int i = 0; i < abilities.Count; i++)
-        {
-            if (!abilityManager.IsReady(i)) continue;
-            var ability = abilities[i];
-            if (ability == null || ability.projectilePrefab == null) continue;
-            if (!abilityManager.TryConsumeCooldown(i)) continue;
-
-            FireWithCurrentMultiShot(ability, target);
-        }
+        TryFireSingleVolley(target);
     }
 
     public void SetFireButtonHeld(bool value)
@@ -85,8 +77,14 @@ public class ProjectileAttackController : MonoBehaviour
     {
         if (abilityManager == null) return;
         if (!IsProjectileUnlocked()) return;
+        if (Time.time < nextGlobalFireTime) return;
 
         Transform target = FindNearestTarget();
+        TryFireSingleVolley(target);
+    }
+
+    private void TryFireSingleVolley(Transform target)
+    {
         var abilities = abilityManager.Abilities;
 
         for (int i = 0; i < abilities.Count; i++)
@@ -97,6 +95,7 @@ public class ProjectileAttackController : MonoBehaviour
             if (!abilityManager.TryConsumeCooldown(i)) continue;
 
             FireWithCurrentMultiShot(ability, target);
+            nextGlobalFireTime = Time.time + abilityManager.GetProjectileCooldownDuration();
             break;
         }
     }

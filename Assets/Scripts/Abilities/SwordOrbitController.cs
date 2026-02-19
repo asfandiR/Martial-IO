@@ -93,7 +93,7 @@ private string anim="Change";
     {
         ApplyNextSwordSkin();
 
-        if (IsLegendarySwordAbility(ability))
+        if (IsSwordAbility(ability))
             AddExtraSword();
     }
 
@@ -148,10 +148,9 @@ private string anim="Change";
         swordOrbiters.Add(orbiter);
     }
 
-    private bool IsLegendarySwordAbility(AbilityData ability)
+    private bool IsSwordAbility(AbilityData ability)
     {
         if (ability == null) return false;
-        if (ability.rarity != AbilityData.AbilityRarity.Legendary) return false;
         if (string.IsNullOrWhiteSpace(ability.abilityName)) return false;
 
         for (int i = 0; i < swordAbilityTokens.Length; i++)

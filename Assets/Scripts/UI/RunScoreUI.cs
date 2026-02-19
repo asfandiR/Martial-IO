@@ -16,18 +16,25 @@ public class RunScoreUI : MonoBehaviour
     [SerializeField] private HealthSystem playerHealth;
     [SerializeField] private bool useSurvivalTimeAsScore = true;
 
-    private const string BestScoreKey = "best_score";
-
     private float survivalTime;
     private int bonusScore;
     private int lastShownScore = -1;
     private bool runFinished;
+    private SaveSystem saveSystem;
 
     public int CurrentScore => Mathf.Max(0, Mathf.FloorToInt(survivalTime) + bonusScore);
-    public int BestScore => PlayerPrefs.GetInt(BestScoreKey, 0);
+    public int BestScore
+    {
+        get
+        {
+            ResolveSaveSystem();
+            return saveSystem != null ? saveSystem.BestScore : 0;
+        }
+    }
 
     private void Awake()
     {
+        ResolveSaveSystem();
         ResolvePlayerRefs();
 
         if (playAgainButton != null)
@@ -104,8 +111,8 @@ public class RunScoreUI : MonoBehaviour
         int best = BestScore;
         if (finalScore > best)
         {
-            PlayerPrefs.SetInt(BestScoreKey, finalScore);
-            PlayerPrefs.Save();
+            ResolveSaveSystem();
+            saveSystem?.TrySetBestScore(finalScore);
             best = finalScore;
         }
 
@@ -135,5 +142,11 @@ public class RunScoreUI : MonoBehaviour
     {
         if (bestScoreText != null)
             bestScoreText.text = $"Best: {best}";
+    }
+
+    private void ResolveSaveSystem()
+    {
+        if (saveSystem == null)
+            saveSystem = SaveSystem.Instance ?? Object.FindFirstObjectByType<SaveSystem>();
     }
 }
