@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -9,7 +9,7 @@ using UnityEngine;
 // - Trigger ability use
 public class AbilityManager : MonoBehaviour
 {
-    private enum AbilityStat
+    public enum AbilityStat
     {
         Damage,
         Cooldown,
@@ -20,7 +20,7 @@ public class AbilityManager : MonoBehaviour
         Pierce
     }
 
-    private static readonly AbilityStat[] AllStats =
+    public static readonly AbilityStat[] AllStats =
     {
         AbilityStat.Damage,
         AbilityStat.Cooldown,
@@ -125,15 +125,15 @@ public class AbilityManager : MonoBehaviour
         return Mathf.Max(0f, projectileCooldownBase * cooldownMultiplier);
     }
 
-    public bool HasAbilityNameToken(string token)
+    public bool HasAbilityTag(AbilityTag tag)
     {
-        if (string.IsNullOrWhiteSpace(token)) return false;
+        if (tag == AbilityTag.None) return false;
 
         for (int i = 0; i < abilities.Count; i++)
         {
             var a = abilities[i];
-            if (a == null || string.IsNullOrWhiteSpace(a.abilityName)) continue;
-            if (a.abilityName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (a == null || a.tags == null) continue;
+            if (a.tags.Contains(tag))
                 return true;
         }
 
@@ -235,42 +235,80 @@ public class AbilityManager : MonoBehaviour
 
     private void ApplyAbilitySideEffects(AbilityData ability)
     {
-        if (ability == null || string.IsNullOrWhiteSpace(ability.abilityName))
+        if (ability == null || ability.tags == null)
             return;
 
-        string name = ability.abilityName;
-        bool isDemon = name.IndexOf("Demon skill", StringComparison.OrdinalIgnoreCase) >= 0;
-        bool isDebuff = name.IndexOf("DeBuff skill", StringComparison.OrdinalIgnoreCase) >= 0
-            || name.IndexOf("Debuff skill", StringComparison.OrdinalIgnoreCase) >= 0;
-        bool isSwordMastery = name.IndexOf("Berserker skill", StringComparison.OrdinalIgnoreCase) >= 0
-            || name.IndexOf("Paladin skill", StringComparison.OrdinalIgnoreCase) >= 0
-            || name.IndexOf("Swordsman skill", StringComparison.OrdinalIgnoreCase) >= 0;
-
-        if (isDemon)
+        for (int i = 0; i < ability.tags.Count; i++)
         {
-            if (weaponController != null)
+            AbilityTag tag = ability.tags[i];
+            switch (tag)
             {
-                weaponController.MultiplyProjectileDamage(1.1f);
-                weaponController.MultiplySwordDamage(1.1f);
-            }
-            if (playerController != null) playerController.MultiplyMoveSpeed(0.98f);
-            return;
-        }
+                // --- Projectile Families ---
+                case AbilityTag.Crossbowman: // Heavy bolts -> Pierce
+                    if (weaponController != null) weaponController.MultiplyPierce(1.25f);
+                    break;
+                case AbilityTag.Archer: // Precision -> Crit Chance
+                    if (weaponController != null) weaponController.MultiplyCritChance(1.15f);
+                    break;
+                case AbilityTag.Aeromancer: // Wind -> Speed (Projectile + Move)
+                    if (weaponController != null) weaponController.MultiplyProjectileSpeed(1.12f);
+                    if (playerController != null) playerController.MultiplyMoveSpeed(1.02f);
+                    break;
+                case AbilityTag.Cryomancer: // Ice -> Lingering presence (Lifetime)
+                    if (weaponController != null) weaponController.MultiplyProjectileLifetime(1.20f);
+                    break;
+                case AbilityTag.Pyromancer: // Fire -> Raw Damage
+                    if (weaponController != null) weaponController.MultiplyProjectileDamage(1.10f);
+                    break;
+                case AbilityTag.Warlock: // Dark Arts -> Crit Damage
+                    if (weaponController != null) weaponController.MultiplyCritMultiplier(1.15f);
+                    break;
+                case AbilityTag.Druid: // Nature -> Growth (Cooldown)
+                    MultiplyCooldown(0.96f);
+                    break;
 
-        if (isDebuff)
-        {
-            if (weaponController != null)
-            {
-                weaponController.MultiplyProjectileDamage(0.95f);
-                weaponController.MultiplySwordDamage(0.95f);
-            }
-            if (playerController != null) playerController.MultiplyMoveSpeed(0.98f);
-            MultiplyCooldown(1.05f);
-            return;
-        }
+                // --- Sword Families ---
+                case AbilityTag.Swordsman: // Technique -> Orbit Speed
+                    if (weaponController != null) weaponController.MultiplySwordOrbitSpeed(1.10f);
+                    break;
+                case AbilityTag.Berserker: // Rage -> Raw Damage
+                    if (weaponController != null) weaponController.MultiplySwordDamage(1.20f);
+                    break;
+                case AbilityTag.Paladin: // Protection -> Sector Coverage
+                    if (weaponController != null) weaponController.AddSwordSectorAngle(swordSectorBonusPerSkill);
+                    break;
+                case AbilityTag.Spearman: // Reach -> Orbit Radius
+                    if (weaponController != null) weaponController.AddSwordRadius(0.35f);
+                    break;
+                case AbilityTag.Blacksmith: // Quality -> Speed + Damage mix
+                    if (weaponController != null)
+                    {
+                        weaponController.MultiplySwordDamage(1.05f);
+                        weaponController.MultiplySwordOrbitSpeed(1.05f);
+                    }
+                    break;
 
-        if (isSwordMastery && weaponController != null)
-            weaponController.AddSwordSectorAngle(swordSectorBonusPerSkill);
+                // --- Specials ---
+                case AbilityTag.Demon: // Power at a cost
+                    if (weaponController != null)
+                    {
+                        weaponController.MultiplyProjectileDamage(1.15f);
+                        weaponController.MultiplySwordDamage(1.15f);
+                    }
+                    if (playerController != null) playerController.MultiplyMoveSpeed(0.98f);
+                    break;
+                case AbilityTag.Debuff: // Cursed power
+                    MultiplyCooldown(1.05f); // Penalty
+                    if (weaponController != null) weaponController.MultiplyProjectileDamage(1.25f); // But high damage
+                    break;
+                case AbilityTag.Buff: // Utility
+                    if (playerController != null) playerController.MultiplyMoveSpeed(1.04f);
+                    break;
+                case AbilityTag.Priest: // Holy -> Cooldowns (in addition to AutoExplosion)
+                    MultiplyCooldown(0.98f);
+                    break;
+            }
+        }
     }
 
     private float GetCurrentLuck()
@@ -332,7 +370,7 @@ public class AbilityManager : MonoBehaviour
         return Mathf.Clamp(mul, 0.3f, 1.7f);
     }
 
-    private bool HasBoostedStat(AbilityData ability, AbilityStat stat)
+    public bool HasBoostedStat(AbilityData ability, AbilityStat stat)
     {
         if (ability == null)
             return false;
@@ -407,11 +445,9 @@ public class AbilityManager : MonoBehaviour
 
     private static bool IsDebuffAbility(AbilityData ability)
     {
-        if (ability == null || string.IsNullOrWhiteSpace(ability.abilityName))
+        if (ability == null || ability.tags == null)
             return false;
 
-        string name = ability.abilityName;
-        return name.IndexOf("DeBuff skill", StringComparison.OrdinalIgnoreCase) >= 0
-            || name.IndexOf("Debuff skill", StringComparison.OrdinalIgnoreCase) >= 0;
+        return ability.tags.Contains(AbilityTag.Debuff);
     }
 }

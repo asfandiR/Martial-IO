@@ -1,4 +1,4 @@
-﻿using UnityEngine;
+﻿﻿using UnityEngine;
 
 // Automatic player explosion ability driven by owned Priest skills.
 [RequireComponent(typeof(AbilityManager))]
@@ -33,8 +33,7 @@ public class PlayerAutoExplosion : MonoBehaviour
     [SerializeField, Min(0.05f)] private float totalLifetime = 0.35f;
 
     [Header("Priest Detection")]
-    [SerializeField] private string priestAbilityToken = "Priest skill";
-    [SerializeField] private string priestAssetToken = "RPGPriestskillicons";
+    [SerializeField] private AbilityTag priestAbilityTag = AbilityTag.Priest;
 
     private AbilityManager abilityManager;
     private HealthSystem health;
@@ -117,19 +116,10 @@ public class PlayerAutoExplosion : MonoBehaviour
 
     private bool IsPriestAbility(AbilityData ability)
     {
-        if (ability == null)
+        if (ability == null || ability.tags == null)
             return false;
 
-        string abilityName = ability.abilityName;
-        if (!string.IsNullOrWhiteSpace(abilityName)
-            && abilityName.IndexOf(priestAbilityToken, System.StringComparison.OrdinalIgnoreCase) >= 0)
-        {
-            return true;
-        }
-
-        string assetName = ability.name;
-        return !string.IsNullOrWhiteSpace(assetName)
-            && assetName.IndexOf(priestAssetToken, System.StringComparison.OrdinalIgnoreCase) >= 0;
+        return ability.tags.Contains(priestAbilityTag);
     }
 
     private int GetRarityPoints(AbilityData.AbilityRarity rarity)

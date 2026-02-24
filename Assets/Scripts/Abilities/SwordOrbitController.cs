@@ -17,30 +17,35 @@ private string anim="Change";
     [SerializeField] private bool swordEnabled = true;
     [SerializeField] private float swordDamage = 2f;
     [SerializeField] private Transform swordOrbitRoot;
-    [SerializeField] private Transform[] swordTransforms = new Transform[8];
-    [SerializeField] private Animator[] Animators = new Animator[8];
+    [SerializeField] private Transform[] swordTransforms = new Transform[0];
+    [SerializeField] private float baseOrbitRadius = 2.5f; // Базовый радиус орбиты
     [SerializeField] private SwordDateBase swordDateBase;
     [SerializeField] private float swordOrbitSpeed = 180f;
     [SerializeField] private float swordTouchDamageInterval = 0.2f;
     [SerializeField] private LayerMask enemyMask;
 
     [Header("Sword Ability Tokens")]
-    [SerializeField] private string[] swordAbilityTokens =
+    [SerializeField] private AbilityTag[] swordAbilityTags =
     {
-        "Swordsman",
-        "Berserker",
-        "Paladin"
+        AbilityTag.Swordsman,
+        AbilityTag.Berserker,
+        AbilityTag.Paladin,
+        AbilityTag.Blacksmith,
+        AbilityTag.Spearman
     };
+     private Animator[] Animators = new Animator[0];
 
     private readonly Collider2D[] swordTouchHits = new Collider2D[32];
     private readonly Dictionary<int, float> swordHitTimers = new Dictionary<int, float>(128);
     private readonly List<SwordOrbiter> swordOrbiters = new List<SwordOrbiter>(8);
+    private ContactFilter2D hitFilter;
 
     private float swordOrbitAngle;
     private int learnedAbilityCount;
     private int unlockedSwordCount;
     private float swordOrbitSpeedMultiplier = 1f;
     private float swordDamageMultiplier = 1f;
+    private float additionalOrbitRadius = 0f;
 
     private void Awake()
     {
@@ -53,12 +58,12 @@ private string anim="Change";
                 break;
             }
         }
-
+Animators = new Animator[swordTransforms.Length];
         for (int i = 0; i < swordTransforms.Length; i++)
         {
             Transform tr = swordTransforms[i];
             if (tr == null) continue;
-
+            Animators[i] = tr.GetComponent<Animator>();
             SpriteRenderer sr = tr.GetComponentInChildren<SpriteRenderer>();
             Collider2D col = tr.GetComponentInChildren<Collider2D>();
             AddSwordOrbiter(tr, sr, col);
@@ -72,6 +77,13 @@ private string anim="Change";
             if (orbiter == null || orbiter.transform == null) continue;
             orbiter.transform.gameObject.SetActive(i < unlockedSwordCount);
         }
+
+        hitFilter = new ContactFilter2D();
+        hitFilter.useLayerMask = true;
+        hitFilter.layerMask = enemyMask;
+        hitFilter.useTriggers = true;
+        
+        UpdateSwordPositions(); // Первичное распределение
     }
 
     private void Update()
@@ -86,7 +98,35 @@ private string anim="Change";
 
     public void AddSwordRadius(float radiusDelta)
     {
-        // Swords are manually positioned in the scene.
+        additionalOrbitRadius += radiusDelta;
+        UpdateSwordPositions();
+    }
+
+    private void UpdateSwordPositions()
+    {
+        int activeCount = unlockedSwordCount;
+        if (activeCount <= 0) return;
+
+        float currentRadius = baseOrbitRadius + additionalOrbitRadius;
+        float angleStep = 360f / activeCount;
+
+        // Распределяем только активные мечи
+        for (int i = 0; i < activeCount; i++)
+        {
+            if (i >= swordOrbiters.Count) break;
+
+            var orbiter = swordOrbiters[i];
+            if (orbiter != null && orbiter.transform != null)
+            {
+                float angleRad = (i * angleStep) * Mathf.Deg2Rad;
+                Vector3 pos = new Vector3(Mathf.Cos(angleRad), Mathf.Sin(angleRad), 0f) * currentRadius;
+                orbiter.transform.localPosition = pos;
+                
+                // Поворачиваем меч лезвием наружу (опционально)
+                float angleDeg = i * angleStep;
+                orbiter.transform.localRotation = Quaternion.Euler(0f, 0f, angleDeg - 90f);
+            }
+        }
     }
 
     public void HandleAbilityLearned(AbilityData ability)
@@ -119,7 +159,7 @@ private string anim="Change";
             if (sprite != null)
                 orbiter.renderer.sprite = sprite;
             orbiter.renderer.color = color;
-            if (Animators != null)
+            if (Animators != null && i < Animators.Length && Animators[i] != null)
             Animators[i].SetTrigger(anim);
         }
 
@@ -130,6 +170,7 @@ private string anim="Change";
     {
         if (unlockedSwordCount >= swordOrbiters.Count) return;
         unlockedSwordCount++;
+        UpdateSwordPositions(); // Пересчитываем симметрию при добавлении нового меча
     }
 
     private void AddSwordOrbiter(Transform tr, SpriteRenderer sr, Collider2D col)
@@ -142,7 +183,7 @@ private string anim="Change";
         {
             transform = tr,
             renderer = sr,
-            collider = col
+            collider = col,
         };
 
         swordOrbiters.Add(orbiter);
@@ -151,14 +192,11 @@ private string anim="Change";
     private bool IsSwordAbility(AbilityData ability)
     {
         if (ability == null) return false;
-        if (string.IsNullOrWhiteSpace(ability.abilityName)) return false;
+        if (ability.tags == null) return false;
 
-        for (int i = 0; i < swordAbilityTokens.Length; i++)
+        for (int i = 0; i < swordAbilityTags.Length; i++)
         {
-            string token = swordAbilityTokens[i];
-            if (string.IsNullOrWhiteSpace(token)) continue;
-
-            if (ability.abilityName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (ability.tags.Contains(swordAbilityTags[i]))
                 return true;
         }
 
@@ -208,12 +246,12 @@ private string anim="Change";
         swordDamageMultiplier *= Mathf.Max(0.1f, multiplier);
     }
 
-    private void OnValidate()
+   /* private void OnValidate()
     {
         if (swordTransforms == null) return;
         if (swordTransforms.Length == 8) return;
         Array.Resize(ref swordTransforms, 8);
-    }
+    }*/
 
     private void DealSwordColliderContactDamage()
     {
@@ -223,14 +261,7 @@ private string anim="Change";
             if (orbiter == null || orbiter.collider == null) continue;
             if (!orbiter.transform.gameObject.activeInHierarchy) continue;
 
-            ContactFilter2D filter = new ContactFilter2D
-            {
-                useLayerMask = true,
-                layerMask = enemyMask.value == 0 ? ~0 : enemyMask.value,
-                useTriggers = true
-            };
-
-            int count = orbiter.collider.Overlap(filter, swordTouchHits);
+            int count = orbiter.collider.Overlap(hitFilter, swordTouchHits);
             if (count <= 0) continue;
 
             for (int i = 0; i < count; i++)

@@ -12,15 +12,15 @@ public class ProjectileAttackController : MonoBehaviour
     [SerializeField] private int maxTargets = 32;
 
     [Header("Projectile Unlock Tokens")]
-    [SerializeField] private string[] projectileAbilityTokens =
+    [SerializeField] private AbilityTag[] projectileAbilityTags =
     {
-        "Crossbowman",
-        "Archer",
-        "Aeromancer",
-        "Cryomancer",
-        "Druid",
-        "Pyromancer",
-        "Warlock"
+        AbilityTag.Crossbowman,
+        AbilityTag.Archer,
+        AbilityTag.Aeromancer,
+        AbilityTag.Cryomancer,
+        AbilityTag.Druid,
+        AbilityTag.Pyromancer,
+        AbilityTag.Warlock
     };
 
     [Header("Multi Shot")]
@@ -173,20 +173,20 @@ public class ProjectileAttackController : MonoBehaviour
     private int GetMultiShotLevel(IReadOnlyList<AbilityData> abilities)
     {
         int level = 0;
-        bool[] familySeen = new bool[projectileAbilityTokens.Length];
+        bool[] familySeen = new bool[projectileAbilityTags.Length];
 
         for (int i = 0; i < abilities.Count; i++)
         {
             AbilityData ability = abilities[i];
             if (ability == null || ability.projectilePrefab == null) continue;
-            int tokenIndex = GetProjectileTokenIndex(ability.abilityName);
-            if (tokenIndex < 0 || familySeen[tokenIndex]) continue;
+            int tagIndex = GetProjectileTagIndex(ability);
+            if (tagIndex < 0 || familySeen[tagIndex]) continue;
 
             if (ability.rarity == AbilityData.AbilityRarity.Rare
                 || ability.rarity == AbilityData.AbilityRarity.Epic
                 || ability.rarity == AbilityData.AbilityRarity.Legendary)
             {
-                familySeen[tokenIndex] = true;
+                familySeen[tagIndex] = true;
                 level++;
             }
         }
@@ -197,33 +197,29 @@ public class ProjectileAttackController : MonoBehaviour
     private int CountDistinctProjectileFamilies(IReadOnlyList<AbilityData> abilities)
     {
         int count = 0;
-        bool[] familySeen = new bool[projectileAbilityTokens.Length];
+        bool[] familySeen = new bool[projectileAbilityTags.Length];
 
         for (int i = 0; i < abilities.Count; i++)
         {
             AbilityData ability = abilities[i];
             if (ability == null || ability.projectilePrefab == null) continue;
-            int tokenIndex = GetProjectileTokenIndex(ability.abilityName);
-            if (tokenIndex < 0 || familySeen[tokenIndex]) continue;
+            int tagIndex = GetProjectileTagIndex(ability);
+            if (tagIndex < 0 || familySeen[tagIndex]) continue;
 
-            familySeen[tokenIndex] = true;
+            familySeen[tagIndex] = true;
             count++;
         }
 
         return count;
     }
 
-    private int GetProjectileTokenIndex(string abilityName)
+    private int GetProjectileTagIndex(AbilityData ability)
     {
-        if (string.IsNullOrWhiteSpace(abilityName))
-            return -1;
+        if (ability == null || ability.tags == null) return -1;
 
-        for (int i = 0; i < projectileAbilityTokens.Length; i++)
+        for (int i = 0; i < projectileAbilityTags.Length; i++)
         {
-            string token = projectileAbilityTokens[i];
-            if (string.IsNullOrWhiteSpace(token)) continue;
-
-            if (abilityName.IndexOf(token, StringComparison.OrdinalIgnoreCase) >= 0)
+            if (ability.tags.Contains(projectileAbilityTags[i]))
                 return i;
         }
 
@@ -318,12 +314,12 @@ public class ProjectileAttackController : MonoBehaviour
     {
         if (abilityManager == null) return false;
 
-        for (int i = 0; i < projectileAbilityTokens.Length; i++)
+        for (int i = 0; i < projectileAbilityTags.Length; i++)
         {
-            string token = projectileAbilityTokens[i];
-            if (string.IsNullOrWhiteSpace(token)) continue;
+            AbilityTag tag = projectileAbilityTags[i];
+            if (tag == AbilityTag.None) continue;
 
-            if (abilityManager.HasAbilityNameToken(token))
+            if (abilityManager.HasAbilityTag(tag))
                 return true;
         }
 

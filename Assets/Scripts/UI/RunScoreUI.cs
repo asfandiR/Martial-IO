@@ -7,6 +7,7 @@ using UnityEngine.UI;
 public class RunScoreUI : MonoBehaviour
 {
     [Header("UI")]
+    [SerializeField] private TMP_Text hudScoreText; // Ссылка на текст в HUD (во время игры)
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text bestScoreText;
     [SerializeField] private Button playAgainButton;
@@ -136,6 +137,9 @@ public class RunScoreUI : MonoBehaviour
         lastShownScore = score;
         if (scoreText != null)
             scoreText.text = $"Score: {score}";
+            
+        if (hudScoreText != null)
+            hudScoreText.text = $"{score}";
     }
 
     private void UpdateBestScoreText(int best)
