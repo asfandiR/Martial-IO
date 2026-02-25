@@ -278,6 +278,7 @@ Animators = new Animator[swordTransforms.Length];
                 if (damageable == null) continue;
 
                 damageable.TakeDamage(swordDamage * swordDamageMultiplier);
+                SoundManager.Instance?.PlaySfx(GameSfxId.SwordHit);
                 swordHitTimers[key] = Mathf.Max(0.05f, swordTouchDamageInterval);
             }
         }

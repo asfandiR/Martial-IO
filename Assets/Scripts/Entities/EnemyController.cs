@@ -217,12 +217,14 @@ public class EnemyController : MonoBehaviour
 
         PlayByKeyword(attackKeyword, forceRestart: true);
         damageable.TakeDamage(contactDamage);
+        SoundManager.Instance?.PlaySfx(GameSfxId.EnemyAttack);
         contactTimer = Mathf.Max(0.1f, contactHitInterval);
     }
 
     private void HandleDamageTaken(float _)
     {
         if (isDying) return;
+        SoundManager.Instance?.PlaySfx(GameSfxId.EnemyHit);
         PlayByKeyword(hitKeyword, forceRestart: true);
         SpawnHitBlood();
     }
@@ -294,6 +296,7 @@ public class EnemyController : MonoBehaviour
 
         SpawnDeathBlood();
         SpawnXpGem();
+        SoundManager.Instance?.PlaySfx(GameSfxId.EnemyDeath, ignoreInterval: true);
         PlayByKeyword(deadKeyword, forceRestart: true);
         StartCoroutine(DespawnAfterDelay(0.15f));
     }

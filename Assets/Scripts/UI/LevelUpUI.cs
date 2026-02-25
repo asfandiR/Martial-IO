@@ -45,7 +45,10 @@ public class LevelUpUI : MonoBehaviour
             GameManager.Instance.OnStateChanged += HandleStateChanged;
 
         if (GameManager.Instance != null && GameManager.Instance.CurrentState == GameManager.GameState.LevelUp)
+        {
+            SoundManager.Instance?.PlaySfx(GameSfxId.LevelUpOpen, ignoreInterval: true);
             ShowChoices();
+        }
     }
 
     private void OnDisable()
@@ -152,7 +155,10 @@ public class LevelUpUI : MonoBehaviour
     private void HandleStateChanged(GameManager.GameState state)
     {
         if (state == GameManager.GameState.LevelUp)
+        {
+            SoundManager.Instance?.PlaySfx(GameSfxId.LevelUpOpen, ignoreInterval: true);
             ShowChoices();
+        }
     }
 
     private void ShowChoices()
@@ -179,6 +185,8 @@ public class LevelUpUI : MonoBehaviour
 
     private void SelectAbility(AbilityData ability)
     {
+        SoundManager.Instance?.PlaySfx(GameSfxId.LevelUpSelect, ignoreInterval: true);
+
         if (ability != null && abilityManager != null)
             abilityManager.RegisterAbility(ability);
 

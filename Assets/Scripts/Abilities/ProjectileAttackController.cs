@@ -94,7 +94,10 @@ public class ProjectileAttackController : MonoBehaviour
             if (ability == null || ability.projectilePrefab == null) continue;
             if (!abilityManager.TryConsumeCooldown(i)) continue;
 
-            FireWithCurrentMultiShot(ability, target);
+            int firedCount = FireWithCurrentMultiShot(ability, target);
+            if (firedCount > 0)
+                SoundManager.Instance?.PlaySfx(GameSfxId.ProjectileFire);
+
             nextGlobalFireTime = Time.time + abilityManager.GetProjectileCooldownDuration();
             break;
         }
@@ -135,7 +138,7 @@ public class ProjectileAttackController : MonoBehaviour
         pierceMultiplier *= Mathf.Max(0.1f, multiplier);
     }
 
-    private void FireWithCurrentMultiShot(AbilityData ability, Transform target)
+    private int FireWithCurrentMultiShot(AbilityData ability, Transform target)
     {
         var abilities = abilityManager.Abilities;
         int projectileSkillCount = CountDistinctProjectileFamilies(abilities);
@@ -147,13 +150,18 @@ public class ProjectileAttackController : MonoBehaviour
 
         if (projectileCount <= 1)
         {
-            Fire(ability, origin, facingDirection);
-            return;
+            return Fire(ability, origin, facingDirection) ? 1 : 0;
         }
 
         Vector3[] directions = BuildMultiShotDirections(projectileCount, facingDirection, target);
+        int firedCount = 0;
         for (int i = 0; i < directions.Length; i++)
-            Fire(ability, origin, directions[i]);
+        {
+            if (Fire(ability, origin, directions[i]))
+                firedCount++;
+        }
+
+        return firedCount;
     }
 
     private int GetProjectileCount(int projectileSkillCount, int multiShotLevel)
@@ -278,9 +286,9 @@ public class ProjectileAttackController : MonoBehaviour
         return best;
     }
 
-    private void Fire(AbilityData ability, Vector3 origin, Vector3 direction)
+    private bool Fire(AbilityData ability, Vector3 origin, Vector3 direction)
     {
-        if (ability == null || ability.projectilePrefab == null) return;
+        if (ability == null || ability.projectilePrefab == null) return false;
 
         direction.z = 0f;
         if (direction.sqrMagnitude < 0.001f)
@@ -293,7 +301,7 @@ public class ProjectileAttackController : MonoBehaviour
         else
             proj = Instantiate(ability.projectilePrefab, origin, Quaternion.identity);
 
-        if (proj == null) return;
+        if (proj == null) return false;
 
         var projectile = proj.GetComponent<ProjectileBase>();
         if (projectile != null)
@@ -308,6 +316,8 @@ public class ProjectileAttackController : MonoBehaviour
             );
             projectile.Init(ability, direction, transform);
         }
+
+        return true;
     }
 
     private bool IsProjectileUnlocked()

@@ -91,6 +91,8 @@ public class RunScoreUI : MonoBehaviour
 
     public void PlayAgain()
     {
+        SoundManager.Instance?.PlaySfx(GameSfxId.UiClick, ignoreInterval: true);
+
         Time.timeScale = 1f;
         Time.fixedDeltaTime = 0.02f;
 

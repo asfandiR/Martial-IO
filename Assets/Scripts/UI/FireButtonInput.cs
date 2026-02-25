@@ -14,6 +14,8 @@ public class FireButtonInput : MonoBehaviour, IPointerDownHandler, IPointerUpHan
 
     public void OnPointerDown(PointerEventData eventData)
     {
+        SoundManager.Instance?.PlaySfx(GameSfxId.UiClick);
+
         if (weaponController != null)
             weaponController.SetFireButtonHeld(true);
     }

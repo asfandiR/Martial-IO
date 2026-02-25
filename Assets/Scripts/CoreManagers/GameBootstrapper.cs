@@ -15,6 +15,7 @@ public class GameBootstrapper : MonoBehaviour
         EnsureSingleton<ObjectPooler>("ObjectPooler");
         EnsureSingleton<LevelManager>("LevelManager");
         EnsureSingleton<InventoryManager>("InventoryManager");
+        EnsureSingleton<SoundManager>("SoundManager");
     }
 
     private void Start()

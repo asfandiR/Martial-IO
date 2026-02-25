@@ -8,6 +8,7 @@ using UnityEngine;
 // - Relay actions to ability/weapon systems
 [RequireComponent(typeof(HealthSystem))]
 [RequireComponent(typeof(Rigidbody2D))]
+[RequireComponent(typeof(PlayerPickupController))]
 public class PlayerController : MonoBehaviour
 {
     [Header("Movement")]
@@ -18,37 +19,20 @@ public class PlayerController : MonoBehaviour
     [SerializeField] private Joystick joystick;
     [SerializeField] private Animator animator;
     [SerializeField] private float startingMaxHp = 20f;
-
-    [Header("XP Pickup")]
-    [SerializeField] private float xpPickupRadius = 1.5f;
-    [SerializeField] private float xpMagnetRadius = 5.5f;
-    [SerializeField] private LayerMask xpGemMask;
-    [SerializeField] private int maxXpGemChecks = 64;
-    [SerializeField] private ParticleSystem xpPickupEffect;
-
-    [Header("Relic Pickup")]
-    [SerializeField] private float relicPickupRadius = 1.5f;
-    [SerializeField] private float relicMagnetRadius = 5.5f;
-    [SerializeField] private LayerMask relicMask;
-    [SerializeField] private int maxRelicChecks = 64;
-    [SerializeField] private bool useXpPickupEffectForRelics = true;
-
-    [Header("Effector Pickup")]
-    [SerializeField] private float effectorPickupRadius = 1.5f;
-    [SerializeField] private float effectorMagnetRadius = 5.5f;
-    [SerializeField] private LayerMask effectorMask;
-    [SerializeField] private int maxEffectorChecks = 64;
-    [SerializeField] private bool useXpPickupEffectForEffectors = true;
+    [Header("Audio")]
+    [SerializeField] private bool enableFootsteps = true;
+    [SerializeField] private float footstepIntervalAtFullSpeed = 0.32f;
+    [SerializeField] private float footstepIntervalAtLowSpeed = 0.5f;
+    [SerializeField] private float minFootstepVelocity = 0.2f;
 
     public event Action<int> OnCollectXp;
 
     private float moveSpeedMultiplier = 1f;
     private HealthSystem health;
     private Rigidbody2D rb;
-    private Collider2D[] xpGemHits;
-    private Collider2D[] relicHits;
-    private Collider2D[] effectorHits;
+    private PlayerPickupController pickupController;
     private Vector2 cachedInput;
+    private float footstepTimer;
 
     public float MoveSpeedMultiplier => moveSpeedMultiplier;
     public float CurrentMoveSpeed => moveSpeed * moveSpeedMultiplier;
@@ -79,24 +63,26 @@ public class PlayerController : MonoBehaviour
         rb.freezeRotation = true;
         rb.interpolation = RigidbodyInterpolation2D.Interpolate;
 
+        pickupController = GetComponent<PlayerPickupController>();
+        if (pickupController == null)
+            pickupController = gameObject.AddComponent<PlayerPickupController>();
+
         if (animator == null)
             animator = GetComponentInChildren<Animator>();
 
         if (joystick == null)
             Debug.LogWarning("Joystick reference is missing on PlayerController.");
-
-        if (xpPickupEffect == null)
-            Debug.LogWarning("XP Pickup Effect reference is missing on PlayerController.");
-
-        xpGemHits = new Collider2D[Mathf.Max(8, maxXpGemChecks)];
-        relicHits = new Collider2D[Mathf.Max(8, maxRelicChecks)];
-        effectorHits = new Collider2D[Mathf.Max(8, maxEffectorChecks)];
     }
 
     private void OnEnable()
     {
         if (health != null)
             health.OnDeath += HandleDeath;
+        if (health != null)
+            health.OnDamage += HandleDamageTaken;
+
+        if (pickupController != null)
+            pickupController.OnCollectXp += HandleXpCollected;
 
         if (animator != null)
             animator.SetBool(IsDeadHash, false);
@@ -106,9 +92,16 @@ public class PlayerController : MonoBehaviour
     {
         if (health != null)
             health.OnDeath -= HandleDeath;
+        if (health != null)
+            health.OnDamage -= HandleDamageTaken;
+
+        if (pickupController != null)
+            pickupController.OnCollectXp -= HandleXpCollected;
 
         if (rb != null)
             rb.linearVelocity = Vector2.zero;
+
+        footstepTimer = 0f;
     }
 
     private void Update()
@@ -117,10 +110,6 @@ public class PlayerController : MonoBehaviour
         float run = Mathf.Clamp01(cachedInput.magnitude);
         if (animator != null)
             animator.SetFloat(RunHash, run);
-
-        HandleXpGemsInRange();
-        HandleRelicsInRange();
-        HandleEffectorsInRange();
     }
 
     private void FixedUpdate()
@@ -139,6 +128,7 @@ public class PlayerController : MonoBehaviour
         Vector2 desiredVelocity = input * (moveSpeed * moveSpeedMultiplier);
         float changeRate = desiredVelocity.sqrMagnitude > 0.0001f ? acceleration : deceleration;
         rb.linearVelocity = Vector2.MoveTowards(rb.linearVelocity, desiredVelocity, changeRate * Time.fixedDeltaTime);
+        TickFootsteps();
 
         if (Mathf.Abs(rb.linearVelocity.x) > 0.05f)
         {
@@ -155,6 +145,8 @@ public class PlayerController : MonoBehaviour
 
     private void HandleDeath()
     {
+        SoundManager.Instance?.PlaySfx(GameSfxId.PlayerDeath, ignoreInterval: true);
+
         if (animator != null)
             animator.SetBool(IsDeadHash, true);
 
@@ -165,195 +157,45 @@ public class PlayerController : MonoBehaviour
             GameManager.Instance.GameOver();
     }
 
-    private void OnTriggerEnter2D(Collider2D other)
+    private void HandleXpCollected(int value)
     {
-        TryCollectXp(other);
-        TryCollectRelic(other);
-        TryCollectEffector(other);
-    }
-
-    private void OnTriggerEnter(Collider other)
-    {
-        TryCollectXp(other);
-        TryCollectRelic(other);
-        TryCollectEffector(other);
-    }
-
-    private void TryCollectXp(Component source)
-    {
-        if (source == null) return;
-        var gem = source.GetComponentInParent<XPGem>();
-        if (gem == null) return;
-
-        if (xpPickupEffect != null)
-            xpPickupEffect.Play();
-
-        CollectGem(gem);
-    }
-
-    private void HandleXpGemsInRange()
-    {
-        float magnetRadius = Mathf.Max(xpPickupRadius, xpMagnetRadius);
-        int count = OverlapCircle(
-            transform.position,
-            magnetRadius,
-            xpGemHits,
-            GetXpGemMask()
-        );
-
-        if (count <= 0) return;
-
-        float pickupSqr = xpPickupRadius * xpPickupRadius;
-
-        for (int i = 0; i < count; i++)
-        {
-            Collider2D col = xpGemHits[i];
-            if (col == null) continue;
-
-            XPGem gem = col.GetComponentInParent<XPGem>();
-            if (gem == null) continue;
-
-            Vector3 delta = gem.transform.position - transform.position;
-            delta.z = 0f;
-
-            if (delta.sqrMagnitude <= pickupSqr)
-                CollectGem(gem);
-            else
-                gem.MagnetizeTo(transform, xpPickupRadius);
-        }
-    }
-
-    private void TryCollectRelic(Component source)
-    {
-        if (source == null) return;
-        var relic = source.GetComponentInParent<RelicPickup>();
-        if (relic == null) return;
-
-        if (useXpPickupEffectForRelics && xpPickupEffect != null)
-            xpPickupEffect.Play();
-
-        CollectRelic(relic);
-    }
-
-    private void HandleRelicsInRange()
-    {
-        float magnetRadius = Mathf.Max(relicPickupRadius, relicMagnetRadius);
-        int count = OverlapCircle(
-            transform.position,
-            magnetRadius,
-            relicHits,
-            GetRelicMask()
-        );
-
-        if (count <= 0) return;
-
-        float pickupSqr = relicPickupRadius * relicPickupRadius;
-
-        for (int i = 0; i < count; i++)
-        {
-            Collider2D col = relicHits[i];
-            if (col == null) continue;
-
-            RelicPickup relic = col.GetComponentInParent<RelicPickup>();
-            if (relic == null) continue;
-
-            Vector3 delta = relic.transform.position - transform.position;
-            delta.z = 0f;
-
-            if (delta.sqrMagnitude <= pickupSqr)
-                CollectRelic(relic);
-            else
-                relic.MagnetizeTo(transform, relicPickupRadius);
-        }
-    }
-
-    private void CollectGem(XPGem gem)
-    {
-        if (gem == null) return;
-
-        int value = gem.Collect();
         if (value > 0)
             OnCollectXp?.Invoke(value);
     }
 
-    private void CollectRelic(RelicPickup relic)
+    private void HandleDamageTaken(float _)
     {
-        if (relic == null) return;
-        relic.Collect();
+        SoundManager.Instance?.PlaySfx(GameSfxId.PlayerHit);
     }
 
-    private void TryCollectEffector(Component source)
+    private void TickFootsteps()
     {
-        if (source == null) return;
-        var effector = source.GetComponentInParent<EffectorPickup>();
-        if (effector == null) return;
+        if (!enableFootsteps || rb == null)
+            return;
 
-        if (useXpPickupEffectForEffectors && xpPickupEffect != null)
-            xpPickupEffect.Play();
-
-        CollectEffector(effector);
-    }
-
-    private void HandleEffectorsInRange()
-    {
-        float magnetRadius = Mathf.Max(effectorPickupRadius, effectorMagnetRadius);
-        int count = OverlapCircle(
-            transform.position,
-            magnetRadius,
-            effectorHits,
-            GetEffectorMask()
-        );
-
-        if (count <= 0) return;
-
-        float pickupSqr = effectorPickupRadius * effectorPickupRadius;
-
-        for (int i = 0; i < count; i++)
+        if (health != null && health.IsDead)
         {
-            Collider2D col = effectorHits[i];
-            if (col == null) continue;
-
-            EffectorPickup effector = col.GetComponentInParent<EffectorPickup>();
-            if (effector == null) continue;
-
-            Vector3 delta = effector.transform.position - transform.position;
-            delta.z = 0f;
-
-            if (delta.sqrMagnitude <= pickupSqr)
-                CollectEffector(effector);
-            else
-                effector.MagnetizeTo(transform, effectorPickupRadius);
+            footstepTimer = 0f;
+            return;
         }
-    }
 
-    private void CollectEffector(EffectorPickup effector)
-    {
-        if (effector == null) return;
-        effector.Collect(gameObject);
-    }
+        float speed = rb.linearVelocity.magnitude;
+        if (speed < minFootstepVelocity)
+        {
+            footstepTimer = 0f;
+            return;
+        }
 
-    private int GetXpGemMask()
-    {
-        return xpGemMask.value == 0 ? ~0 : xpGemMask.value;
-    }
+        float maxSpeed = Mathf.Max(0.01f, CurrentMoveSpeed);
+        float t = Mathf.Clamp01(speed / maxSpeed);
+        float interval = Mathf.Lerp(footstepIntervalAtLowSpeed, footstepIntervalAtFullSpeed, t);
 
-    private int GetRelicMask()
-    {
-        return relicMask.value == 0 ? ~0 : relicMask.value;
-    }
+        footstepTimer -= Time.fixedDeltaTime;
+        if (footstepTimer > 0f)
+            return;
 
-    private int GetEffectorMask()
-    {
-        return effectorMask.value == 0 ? ~0 : effectorMask.value;
-    }
-
-    private static int OverlapCircle(Vector2 center, float radius, Collider2D[] buffer, int layerMask)
-    {
-        ContactFilter2D filter = new ContactFilter2D();
-        filter.useLayerMask = true;
-        filter.layerMask = layerMask;
-        filter.useTriggers = true;
-        return Physics2D.OverlapCircle(center, radius, filter, buffer);
+        SoundManager.Instance?.PlaySfx(GameSfxId.Footstep);
+        footstepTimer = Mathf.Max(0.05f, interval);
     }
 }
 

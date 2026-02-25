@@ -25,8 +25,12 @@ public class InventoryToggleButton : MonoBehaviour
     {
         if (inventoryPanel == null) return;
 
+        bool wasOpen = inventoryPanel.activeSelf;
         inventoryPanel.SetActive(isOpen);
         HandlePauseState(isOpen);
+
+        if (wasOpen != isOpen)
+            SoundManager.Instance?.PlaySfx(isOpen ? GameSfxId.UiOpen : GameSfxId.UiClose);
     }
 
     private void HandlePauseState(bool inventoryOpen)
