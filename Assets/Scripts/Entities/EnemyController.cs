@@ -34,6 +34,22 @@ public class EnemyController : MonoBehaviour
     [SerializeField] private float desiredDistanceFromPlayer = 1.6f;
     [SerializeField] private float distanceTolerance = 0.2f;
 
+    [Header("Blood VFX")]
+    [SerializeField] private GameObject directionalBlood;
+    [SerializeField] private GameObject splashBlood;
+    [SerializeField] private float directionalBloodLifetime = 1.25f;
+    [SerializeField] private float splashBloodLifetime = 1.5f;
+    [SerializeField, Range(0f, 1f)] private float hitDirectionalBloodChance = 0.85f;
+    [SerializeField] private float hitBloodCooldown = 0.06f;
+    [SerializeField, Range(0f, 1f)] private float hitStainChance = 0.4f;
+    [SerializeField] private float stainCooldown = 0.12f;
+    [SerializeField] private Vector2 stainScaleRange = new Vector2(0.35f, 0.7f);
+    [SerializeField] private Vector2 deathStainScaleRange = new Vector2(0.7f, 1.15f);
+    [SerializeField] private Vector2 stainLifetimeRange = new Vector2(8f, 14f);
+    [SerializeField] private int bloodStainSortingOrder = -1;
+    [SerializeField] private string bloodStainSortingLayer = "";
+    [SerializeField] private float bloodGroundOffsetY = 0.03f;
+
     private Transform target;
     private HealthSystem health;
     private Rigidbody2D rb;
@@ -44,6 +60,8 @@ public class EnemyController : MonoBehaviour
     private bool isDying;
     private string lastPlayedClipName;
     private Vector2 desiredVelocity;
+    private float hitBloodCooldownTimer;
+    private float stainCooldownTimer;
 
     private void Awake()
     {
@@ -73,6 +91,8 @@ public class EnemyController : MonoBehaviour
         isDying = false;
         lastPlayedClipName = null;
         desiredVelocity = Vector2.zero;
+        hitBloodCooldownTimer = 0f;
+        stainCooldownTimer = 0f;
 
         if (health != null)
         {
@@ -114,6 +134,10 @@ public class EnemyController : MonoBehaviour
 
         if (contactTimer > 0f)
             contactTimer -= Time.deltaTime;
+        if (hitBloodCooldownTimer > 0f)
+            hitBloodCooldownTimer -= Time.deltaTime;
+        if (stainCooldownTimer > 0f)
+            stainCooldownTimer -= Time.deltaTime;
 
         if (target == null)
         {
@@ -200,6 +224,7 @@ public class EnemyController : MonoBehaviour
     {
         if (isDying) return;
         PlayByKeyword(hitKeyword, forceRestart: true);
+        SpawnHitBlood();
     }
 
     private Vector3 GetDistanceControlDirection(Vector3 toTarget)
@@ -267,9 +292,136 @@ public class EnemyController : MonoBehaviour
         if (rb != null)
             rb.linearVelocity = Vector2.zero;
 
+        SpawnDeathBlood();
         SpawnXpGem();
         PlayByKeyword(deadKeyword, forceRestart: true);
         StartCoroutine(DespawnAfterDelay(0.15f));
+    }
+
+    private void SpawnHitBlood()
+    {
+        Vector2 dir = GetBloodDirection();
+        Vector3 spawnPos = GetBloodSpawnPosition();
+
+        if (directionalBlood != null && hitBloodCooldownTimer <= 0f && UnityEngine.Random.value <= hitDirectionalBloodChance)
+        {
+            SpawnOneShotVfx(
+                directionalBlood,
+                spawnPos,
+                Quaternion.Euler(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg),
+                directionalBloodLifetime
+            );
+            hitBloodCooldownTimer = Mathf.Max(0f, hitBloodCooldown);
+        }
+
+        if (stainCooldownTimer <= 0f && UnityEngine.Random.value <= hitStainChance)
+        {
+            SpawnBloodStain(spawnPos, stainScaleRange);
+            stainCooldownTimer = Mathf.Max(0f, stainCooldown);
+        }
+    }
+
+    private void SpawnDeathBlood()
+    {
+        Vector2 dir = GetBloodDirection();
+        Vector3 spawnPos = GetBloodSpawnPosition();
+
+        if (splashBlood != null)
+        {
+            SpawnOneShotVfx(
+                splashBlood,
+                spawnPos,
+                Quaternion.Euler(0f, 0f, UnityEngine.Random.Range(0f, 360f)),
+                splashBloodLifetime
+            );
+        }
+
+        if (directionalBlood != null)
+        {
+            SpawnOneShotVfx(
+                directionalBlood,
+                spawnPos,
+                Quaternion.Euler(0f, 0f, Mathf.Atan2(dir.y, dir.x) * Mathf.Rad2Deg),
+                directionalBloodLifetime
+            );
+        }
+
+        SpawnBloodStain(spawnPos, deathStainScaleRange);
+        if (UnityEngine.Random.value <= 0.65f)
+            SpawnBloodStain(spawnPos + (Vector3)(dir * UnityEngine.Random.Range(0.08f, 0.22f)), deathStainScaleRange);
+    }
+
+    private void SpawnOneShotVfx(GameObject prefab, Vector3 position, Quaternion rotation, float lifetime)
+    {
+        if (prefab == null) return;
+
+        GameObject instance = null;
+        if (ObjectPooler.Instance != null)
+            instance = ObjectPooler.Instance.Get(prefab, position, rotation);
+
+        if (instance == null)
+            instance = Instantiate(prefab, position, rotation);
+
+        if (instance == null) return;
+
+        var autoRelease = instance.GetComponent<TimedAutoRelease>();
+        if (autoRelease == null)
+            autoRelease = instance.AddComponent<TimedAutoRelease>();
+        autoRelease.Arm(lifetime);
+
+        var particles = instance.GetComponentsInChildren<ParticleSystem>(true);
+        for (int i = 0; i < particles.Length; i++)
+        {
+            if (particles[i] == null) continue;
+            particles[i].Clear(true);
+            particles[i].Play(true);
+        }
+    }
+
+    private void SpawnBloodStain(Vector3 aroundPosition, Vector2 scaleRange)
+    {
+        float minScale = Mathf.Min(scaleRange.x, scaleRange.y);
+        float maxScale = Mathf.Max(scaleRange.x, scaleRange.y);
+        float scale = UnityEngine.Random.Range(minScale, maxScale);
+
+        float minLife = Mathf.Min(stainLifetimeRange.x, stainLifetimeRange.y);
+        float maxLife = Mathf.Max(stainLifetimeRange.x, stainLifetimeRange.y);
+        float life = UnityEngine.Random.Range(minLife, maxLife);
+
+        Vector2 offset = UnityEngine.Random.insideUnitCircle * (scale * 0.18f);
+        Vector3 pos = aroundPosition + new Vector3(offset.x, offset.y + bloodGroundOffsetY, 0f);
+
+        TemporaryBloodStain.Spawn(pos, scale, life, bloodStainSortingOrder, bloodStainSortingLayer);
+    }
+
+    private Vector3 GetBloodSpawnPosition()
+    {
+        Collider2D col = GetComponentInChildren<Collider2D>();
+        if (col != null)
+        {
+            Bounds b = col.bounds;
+            return new Vector3(b.center.x, b.min.y, transform.position.z);
+        }
+
+        return transform.position;
+    }
+
+    private Vector2 GetBloodDirection()
+    {
+        if (target != null)
+        {
+            Vector2 fromPlayer = ((Vector2)transform.position - (Vector2)target.position);
+            if (fromPlayer.sqrMagnitude > 0.001f)
+                return fromPlayer.normalized;
+        }
+
+        if (desiredVelocity.sqrMagnitude > 0.001f)
+            return (-desiredVelocity).normalized;
+
+        Vector2 random = UnityEngine.Random.insideUnitCircle;
+        if (random.sqrMagnitude <= 0.0001f)
+            random = Vector2.right;
+        return random.normalized;
     }
 
     private IEnumerator DespawnAfterDelay(float delay)

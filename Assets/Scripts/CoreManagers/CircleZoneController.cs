@@ -15,6 +15,7 @@ public class CircleZoneController : MonoBehaviour
     [Header("Visuals (Optional)")]
     [SerializeField] private LineRenderer zoneVisuals;
     [SerializeField] private int circleSegments = 64;
+    [SerializeField] private float ZOffset = -1f; // Чтобы линия была видна поверх других объектов
 
     private float timeElapsed;
     private float currentRadius;
@@ -55,20 +56,20 @@ public class CircleZoneController : MonoBehaviour
         float distance = Vector2.Distance(playerTransform.position, centerPosition);
         
         // Вариант А: Жесткая стена (игрок не может выйти)
-        if (distance > currentRadius)
+        /*if (distance > currentRadius)
         {
             Vector2 fromCenter = (Vector2)playerTransform.position - centerPosition;
             fromCenter = fromCenter.normalized * currentRadius;
             playerTransform.position = centerPosition + fromCenter;
         }
-
+*/
         // Вариант Б: Урон за зоной (раскомментируйте, если нужно вместо стены)
-        /*
+        
         if (distance > currentRadius && playerHealth != null)
         {
             playerHealth.TakeDamage(damagePerSecondOutside * Time.deltaTime);
         }
-        */
+        
     }
 
     private void DrawZone()
@@ -86,7 +87,7 @@ public class CircleZoneController : MonoBehaviour
         {
             float x = currentRadius * Mathf.Cos(theta) + centerPosition.x;
             float y = currentRadius * Mathf.Sin(theta) + centerPosition.y;
-            zoneVisuals.SetPosition(i, new Vector3(x, y, 0f));
+            zoneVisuals.SetPosition(i, new Vector3(x, y, ZOffset));
             theta += deltaTheta;
         }
     }

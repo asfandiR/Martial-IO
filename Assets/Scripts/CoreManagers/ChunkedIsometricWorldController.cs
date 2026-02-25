@@ -1,4 +1,3 @@
-using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Tilemaps;
@@ -7,85 +6,62 @@ using UnityEngine.Tilemaps;
 using UnityEditor;
 #endif
 
-// Generates a finite random isometric map, caches chunk data in RAM,
-// and streams 64x64 tile chunks around the player.
-// Also regenerates a new random map on player death and teleports player to origin.
+// Generates a finite random isometric map at once.
 public class ChunkedIsometricWorldController : MonoBehaviour
 {
-    private const int RequiredChunkSize = 64;
+    [System.Serializable]
+    private class BiomeTileSet
+    {
+        public string biomeName = "Biome";
+        public TileBase earthTile;
+        public TileBase mudTile;
+        public TileBase grassTile;
+
+        public bool IsConfigured =>
+            earthTile != null &&
+            mudTile != null &&
+            grassTile != null;
+    }
 
     [Header("References")]
-    [SerializeField] private Transform player;
     [SerializeField] private Grid grid;
-    [SerializeField] private Transform chunksRoot;
+    [SerializeField] private Transform mapRoot;
 
     [Header("Tile Source")]
     [SerializeField] private TileBase[] groundTiles;
     [SerializeField] private string tileFolderPath = "Assets/Free 32x32 Isometric Tileset Pack/Tile Palette/Palette Tiles";
 
+    [Header("Biome Tiles (3 biomes x 3 tiles)")]
+    [SerializeField] private BiomeTileSet[] biomes = new BiomeTileSet[3];
+
+    [Header("Biome Noise")]
+    [SerializeField, Min(0.001f)] private float biomeNoiseScale = 0.0125f;
+    [SerializeField, Range(0f, 0.49f)] private float biomeBlendWidth = 0.18f;
+
+    [Header("Biome Detail Noise")]
+    [SerializeField, Min(0.001f)] private float biomeDetailNoiseScale = 0.08f;
+    [SerializeField, Range(0f, 1f)] private float mudThreshold = 0.38f;
+    [SerializeField, Range(0f, 1f)] private float grassThreshold = 0.7f;
+
     [Header("Map Size (Tiles)")]
     [SerializeField] private Vector2Int maxMapSizeTiles = new Vector2Int(512, 512);
 
-    [Header("Chunk Streaming")]
-    [SerializeField, Min(8)] private int chunkSize = 64;
-    [SerializeField, Min(0)] private int activeChunkRadius = 1;
-    [SerializeField, Min(0.05f)] private float chunkRefreshInterval = 0.15f;
+    [Header("Generation Settings")]
     [SerializeField] private bool generateOnStart = true;
 
     [Header("Random Generation")]
     [SerializeField] private bool randomizeSeedOnStart = true;
     [SerializeField] private int seed = 12345;
 
-    [Header("Player Death Reset")]
-    [SerializeField] private bool regenerateOnPlayerDeath = true;
-    [SerializeField, Min(0f)] private float respawnDelayRealtime = 0.15f;
-    [SerializeField] private Vector2 respawnPosition = Vector2.zero;
-    [SerializeField] private bool clearEnemiesOnRespawn = true;
-    [SerializeField] private bool clearLootOnRespawn = true;
-    [SerializeField] private bool resetLevelTimerOnRespawn = true;
-
-    private readonly Dictionary<Vector2Int, ChunkData> chunkCache = new Dictionary<Vector2Int, ChunkData>();
-    private readonly Dictionary<Vector2Int, Tilemap> loadedChunks = new Dictionary<Vector2Int, Tilemap>();
-    private readonly List<Vector2Int> scratchChunkKeys = new List<Vector2Int>(128);
-
-    private HealthSystem playerHealth;
-    private Rigidbody2D playerRb;
-    private Animator playerAnimator;
-    private float nextRefreshTime;
     private bool worldInitialized;
-    private bool respawnRoutineRunning;
-    private Vector2Int currentPlayerChunk = new Vector2Int(int.MinValue, int.MinValue);
-
-    private static readonly int IsDeadHash = Animator.StringToHash("IsDead");
-    private static readonly int RunHash = Animator.StringToHash("Run");
-
-    private sealed class ChunkData
-    {
-        public int[] tileIndices;
-        public bool hasAnyTile;
-    }
 
     private void Awake()
     {
-        chunkSize = RequiredChunkSize;
-        ResolveReferences();
         EnsureGrid();
-    }
-
-    private void OnEnable()
-    {
-        SubscribePlayerDeath();
-    }
-
-    private void OnDisable()
-    {
-        UnsubscribePlayerDeath();
     }
 
     private void Start()
     {
-        SubscribePlayerDeath();
-
         if (randomizeSeedOnStart)
             seed = Random.Range(int.MinValue, int.MaxValue);
 
@@ -95,14 +71,6 @@ public class ChunkedIsometricWorldController : MonoBehaviour
 
     private void Update()
     {
-        if (!worldInitialized || player == null)
-            return;
-
-        if (Time.unscaledTime < nextRefreshTime)
-            return;
-
-        nextRefreshTime = Time.unscaledTime + chunkRefreshInterval;
-        RefreshChunksAroundPlayer(force: false);
     }
 
     [ContextMenu("Generate New Map")]
@@ -116,40 +84,13 @@ public class ChunkedIsometricWorldController : MonoBehaviour
         seed = newSeed;
 
         EnsureGrid();
-        ResolveReferences();
-
-        chunkCache.Clear();
-        UnloadAllChunks();
+        GenerateFullMap();
 
         worldInitialized = true;
-        currentPlayerChunk = new Vector2Int(int.MinValue, int.MinValue);
-        RefreshChunksAroundPlayer(force: true);
-    }
-
-    private void ResolveReferences()
-    {
-        if (player == null)
-        {
-            GameObject playerGo = GameObject.FindGameObjectWithTag("Player");
-            if (playerGo != null)
-                player = playerGo.transform;
-        }
-
-        if (player != null)
-        {
-            if (playerHealth == null)
-                playerHealth = player.GetComponent<HealthSystem>();
-            if (playerRb == null)
-                playerRb = player.GetComponent<Rigidbody2D>();
-            if (playerAnimator == null)
-                playerAnimator = player.GetComponentInChildren<Animator>();
-        }
     }
 
     private void EnsureGrid()
     {
-        chunkSize = RequiredChunkSize;
-
         if (grid == null)
             grid = GetComponentInChildren<Grid>();
 
@@ -166,261 +107,81 @@ public class ChunkedIsometricWorldController : MonoBehaviour
         if (grid.cellLayout != GridLayout.CellLayout.Isometric)
             Debug.LogWarning("[ChunkedIsometricWorldController] Assigned Grid is not Isometric. Use an Isometric Grid (e.g. Sample Grid from the tileset pack).", this);
 
-        if (chunksRoot == null)
+        if (mapRoot == null)
         {
-            Transform found = grid.transform.Find("Chunks");
+            Transform found = grid.transform.Find("MapRoot");
             if (found != null)
             {
-                chunksRoot = found;
+                mapRoot = found;
             }
             else
             {
-                GameObject root = new GameObject("Chunks");
+                GameObject root = new GameObject("MapRoot");
                 root.transform.SetParent(grid.transform, false);
-                chunksRoot = root.transform;
+                mapRoot = root.transform;
             }
         }
     }
 
-    private void SubscribePlayerDeath()
+
+    private void GenerateFullMap()
     {
-        ResolveReferences();
-        if (!regenerateOnPlayerDeath || playerHealth == null)
+        bool hasBiomeTiles = GetConfiguredBiomeCount() > 0;
+        bool hasFallbackTiles = groundTiles != null && groundTiles.Length > 0;
+
+        if (mapRoot == null || (!hasBiomeTiles && !hasFallbackTiles))
             return;
 
-        playerHealth.OnDeath -= HandlePlayerDeath;
-        playerHealth.OnDeath += HandlePlayerDeath;
-    }
-
-    private void UnsubscribePlayerDeath()
-    {
-        if (playerHealth != null)
-            playerHealth.OnDeath -= HandlePlayerDeath;
-    }
-
-    private void HandlePlayerDeath()
-    {
-        if (!regenerateOnPlayerDeath || respawnRoutineRunning)
-            return;
-
-        StartCoroutine(RespawnAndRegenerateRoutine());
-    }
-
-    private IEnumerator RespawnAndRegenerateRoutine()
-    {
-        respawnRoutineRunning = true;
-
-        if (respawnDelayRealtime > 0f)
-            yield return new WaitForSecondsRealtime(respawnDelayRealtime);
-        else
-            yield return null;
-
-        ClearRuntimeActorsForRespawn();
-        RespawnPlayerAtOrigin();
-
-        if (resetLevelTimerOnRespawn && LevelManager.Instance != null)
-            LevelManager.Instance.ResetLevel();
-
-        GenerateNewMap();
-
-        if (GameManager.Instance != null)
-            GameManager.Instance.StartGameplay();
-
-        respawnRoutineRunning = false;
-    }
-
-    private void RespawnPlayerAtOrigin()
-    {
-        if (player == null)
-            return;
-
-        Vector3 pos = player.position;
-        pos.x = respawnPosition.x;
-        pos.y = respawnPosition.y;
-        player.position = pos;
-
-        if (playerRb != null)
-            playerRb.linearVelocity = Vector2.zero;
-
-        if (playerHealth != null && playerHealth.IsDead)
-            playerHealth.Revive(playerHealth.MaxHp);
-
-        if (playerAnimator != null)
+        // Clear old map
+        for (int i = mapRoot.childCount - 1; i >= 0; i--)
         {
-            playerAnimator.SetBool(IsDeadHash, false);
-            playerAnimator.SetFloat(RunHash, 0f);
-        }
-    }
-
-    private void ClearRuntimeActorsForRespawn()
-    {
-        if (clearEnemiesOnRespawn)
-        {
-            EnemyController[] enemies = FindObjectsByType<EnemyController>(FindObjectsSortMode.None);
-            for (int i = 0; i < enemies.Length; i++)
-            {
-                if (enemies[i] == null) continue;
-                ReturnOrDestroy(enemies[i].gameObject);
-            }
+            if (Application.isPlaying)
+                Destroy(mapRoot.GetChild(i).gameObject);
+            else
+                DestroyImmediate(mapRoot.GetChild(i).gameObject);
         }
 
-        if (clearLootOnRespawn)
-        {
-            XPGem[] gems = FindObjectsByType<XPGem>(FindObjectsSortMode.None);
-            for (int i = 0; i < gems.Length; i++)
-            {
-                if (gems[i] == null) continue;
-                ReturnOrDestroy(gems[i].gameObject);
-            }
+        GameObject mapGo = new GameObject("FullMap");
+        mapGo.transform.SetParent(mapRoot, false);
+        mapGo.transform.localPosition = Vector3.zero;
 
-            RelicPickup[] relics = FindObjectsByType<RelicPickup>(FindObjectsSortMode.None);
-            for (int i = 0; i < relics.Length; i++)
-            {
-                if (relics[i] == null) continue;
-                ReturnOrDestroy(relics[i].gameObject);
-            }
-
-            EffectorPickup[] effectors = FindObjectsByType<EffectorPickup>(FindObjectsSortMode.None);
-            for (int i = 0; i < effectors.Length; i++)
-            {
-                if (effectors[i] == null) continue;
-                ReturnOrDestroy(effectors[i].gameObject);
-            }
-        }
-    }
-
-    private static void ReturnOrDestroy(GameObject go)
-    {
-        if (go == null) return;
-
-        if (ObjectPooler.Instance != null)
-            ObjectPooler.Instance.ReturnToPool(go);
-        else
-            Destroy(go);
-    }
-
-    private void RefreshChunksAroundPlayer(bool force)
-    {
-        if (player == null || grid == null || chunksRoot == null)
-            return;
-
-        Vector3Int cell = grid.WorldToCell(player.position);
-        Vector2Int playerChunk = WorldCellToChunk(cell.x, cell.y);
-
-        if (!force && playerChunk == currentPlayerChunk)
-            return;
-
-        currentPlayerChunk = playerChunk;
-
-        for (int y = -activeChunkRadius; y <= activeChunkRadius; y++)
-        {
-            for (int x = -activeChunkRadius; x <= activeChunkRadius; x++)
-            {
-                Vector2Int coord = new Vector2Int(playerChunk.x + x, playerChunk.y + y);
-                if (!DoesChunkIntersectMap(coord))
-                    continue;
-
-                EnsureChunkLoaded(coord);
-            }
-        }
-
-        scratchChunkKeys.Clear();
-        foreach (KeyValuePair<Vector2Int, Tilemap> kv in loadedChunks)
-            scratchChunkKeys.Add(kv.Key);
-
-        int maxDist = activeChunkRadius;
-        for (int i = 0; i < scratchChunkKeys.Count; i++)
-        {
-            Vector2Int key = scratchChunkKeys[i];
-            if (Mathf.Abs(key.x - playerChunk.x) <= maxDist && Mathf.Abs(key.y - playerChunk.y) <= maxDist)
-                continue;
-
-            UnloadChunk(key);
-        }
-    }
-
-    private void EnsureChunkLoaded(Vector2Int coord)
-    {
-        if (loadedChunks.ContainsKey(coord))
-            return;
-
-        ChunkData data = GetOrCreateChunkData(coord);
-        if (data == null || !data.hasAnyTile)
-            return;
-
-        GameObject chunkGo = new GameObject($"Chunk_{coord.x}_{coord.y}");
-        chunkGo.transform.SetParent(chunksRoot, false);
-        chunkGo.transform.localPosition = grid.CellToLocal(new Vector3Int(coord.x * chunkSize, coord.y * chunkSize, 0));
-
-        Tilemap tilemap = chunkGo.AddComponent<Tilemap>();
-        TilemapRenderer renderer = chunkGo.AddComponent<TilemapRenderer>();
+        Tilemap tilemap = mapGo.AddComponent<Tilemap>();
+        TilemapRenderer renderer = mapGo.AddComponent<TilemapRenderer>();
         renderer.sortOrder = TilemapRenderer.SortOrder.TopRight;
+        renderer.mode = TilemapRenderer.Mode.Chunk;
+        renderer.sortingOrder = -2;
 
-        BoundsInt bounds = new BoundsInt(0, 0, 0, chunkSize, chunkSize, 1);
-        TileBase[] tiles = new TileBase[chunkSize * chunkSize];
+        int width = maxMapSizeTiles.x;
+        int height = maxMapSizeTiles.y;
+        int minX = -width / 2;
+        int minY = -height / 2;
 
-        for (int i = 0; i < data.tileIndices.Length && i < tiles.Length; i++)
+        BoundsInt bounds = new BoundsInt(minX, minY, 0, width, height, 1);
+        TileBase[] tiles = new TileBase[width * height];
+
+        for (int y = 0; y < height; y++)
         {
-            int tileIndex = data.tileIndices[i];
-            if (tileIndex < 0 || groundTiles == null || tileIndex >= groundTiles.Length)
-                continue;
-
-            tiles[i] = groundTiles[tileIndex];
+            for (int x = 0; x < width; x++)
+            {
+                int wx = minX + x;
+                int wy = minY + y;
+                
+                tiles[x + y * width] = SelectTile(wx, wy);
+            }
         }
 
         tilemap.SetTilesBlock(bounds, tiles);
         tilemap.CompressBounds();
-
-        loadedChunks[coord] = tilemap;
     }
 
-    private ChunkData GetOrCreateChunkData(Vector2Int coord)
+    private TileBase SelectTile(int wx, int wy)
     {
-        if (chunkCache.TryGetValue(coord, out ChunkData data))
-            return data;
-
-        data = GenerateChunkData(coord);
-        chunkCache[coord] = data;
-        return data;
-    }
-
-    private ChunkData GenerateChunkData(Vector2Int coord)
-    {
-        ChunkData data = new ChunkData
-        {
-            tileIndices = new int[chunkSize * chunkSize],
-            hasAnyTile = false
-        };
-
-        for (int i = 0; i < data.tileIndices.Length; i++)
-            data.tileIndices[i] = -1;
+        if (TrySelectBiomeTile(wx, wy, out TileBase biomeTile))
+            return biomeTile;
 
         if (groundTiles == null || groundTiles.Length == 0)
-            return data;
+            return null;
 
-        int worldOriginX = coord.x * chunkSize;
-        int worldOriginY = coord.y * chunkSize;
-
-        for (int y = 0; y < chunkSize; y++)
-        {
-            for (int x = 0; x < chunkSize; x++)
-            {
-                int wx = worldOriginX + x;
-                int wy = worldOriginY + y;
-                if (!IsInsideMap(wx, wy))
-                    continue;
-
-                int idx = x + y * chunkSize;
-                data.tileIndices[idx] = SelectTileIndex(wx, wy);
-                data.hasAnyTile = true;
-            }
-        }
-
-        return data;
-    }
-
-    private int SelectTileIndex(int wx, int wy)
-    {
         uint hash = Hash2D(wx, wy, seed);
 
         // Use a bit of coherent noise + hash to avoid overly uniform randomness.
@@ -435,89 +196,84 @@ public class ChunkedIsometricWorldController : MonoBehaviour
         if ((hash & 7u) == 0u)
             baseIndex = (int)(hash % (uint)groundTiles.Length);
 
-        return baseIndex;
+        return groundTiles[baseIndex];
     }
 
-    private bool IsInsideMap(int wx, int wy)
+    private bool TrySelectBiomeTile(int wx, int wy, out TileBase tile)
     {
-        Vector2Int size = GetSanitizedMapSize();
+        tile = null;
 
-        int minX = -size.x / 2;
-        int minY = -size.y / 2;
-        int maxXExclusive = minX + size.x;
-        int maxYExclusive = minY + size.y;
+        int biomeCount = GetConfiguredBiomeCount();
+        if (biomeCount < 1)
+            return false;
 
-        return wx >= minX && wx < maxXExclusive && wy >= minY && wy < maxYExclusive;
-    }
-
-    private bool DoesChunkIntersectMap(Vector2Int coord)
-    {
-        Vector2Int size = GetSanitizedMapSize();
-        int minX = -size.x / 2;
-        int minY = -size.y / 2;
-        int maxXExclusive = minX + size.x;
-        int maxYExclusive = minY + size.y;
-
-        int chunkMinX = coord.x * chunkSize;
-        int chunkMinY = coord.y * chunkSize;
-        int chunkMaxXExclusive = chunkMinX + chunkSize;
-        int chunkMaxYExclusive = chunkMinY + chunkSize;
-
-        bool overlapsX = chunkMaxXExclusive > minX && chunkMinX < maxXExclusive;
-        bool overlapsY = chunkMaxYExclusive > minY && chunkMinY < maxYExclusive;
-        return overlapsX && overlapsY;
-    }
-
-    private Vector2Int WorldCellToChunk(int x, int y)
-    {
-        return new Vector2Int(FloorDiv(x, chunkSize), FloorDiv(y, chunkSize));
-    }
-
-    private static int FloorDiv(int value, int divisor)
-    {
-        int q = value / divisor;
-        int r = value % divisor;
-        if (r != 0 && ((r < 0) ^ (divisor < 0)))
-            q--;
-        return q;
-    }
-
-    private Vector2Int GetSanitizedMapSize()
-    {
-        return new Vector2Int(
-            Mathf.Max(chunkSize, maxMapSizeTiles.x),
-            Mathf.Max(chunkSize, maxMapSizeTiles.y)
+        float biomeNoise = Mathf.PerlinNoise(
+            (wx + seed * 0.0013f) * biomeNoiseScale,
+            (wy - seed * 0.0017f) * biomeNoiseScale
         );
+
+        float biomeCoord = biomeNoise * biomeCount;
+        int primaryIndex = Mathf.Clamp(Mathf.FloorToInt(biomeCoord), 0, biomeCount - 1);
+        float frac = biomeCoord - Mathf.Floor(biomeCoord);
+
+        int selectedBiome = primaryIndex;
+
+        // Blend into the next biome near the edge of the current biome band.
+        if (primaryIndex < biomeCount - 1 && frac > 1f - biomeBlendWidth && biomeBlendWidth > 0f)
+        {
+            float t = Mathf.InverseLerp(1f - biomeBlendWidth, 1f, frac);
+            t = t * t * (3f - 2f * t); // smoothstep
+
+            uint edgeHash = Hash2D(wx * 31, wy * 31, seed ^ 0x4F1BBCDC);
+            float random01 = (edgeHash & 1023u) / 1023f;
+            if (random01 < t)
+                selectedBiome = primaryIndex + 1;
+        }
+
+        BiomeTileSet biome = biomes[selectedBiome];
+        if (biome == null || !biome.IsConfigured)
+            return false;
+
+        float detailNoise = Mathf.PerlinNoise(
+            (wx - seed * 0.0091f) * biomeDetailNoiseScale,
+            (wy + seed * 0.0067f) * biomeDetailNoiseScale
+        );
+
+        float mudCutoff = Mathf.Clamp01(mudThreshold);
+        float grassCutoff = Mathf.Max(mudCutoff, Mathf.Clamp01(grassThreshold));
+
+        if (detailNoise < mudCutoff)
+            tile = biome.mudTile;
+        else if (detailNoise < grassCutoff)
+            tile = biome.earthTile;
+        else
+            tile = biome.grassTile;
+
+        return tile != null;
+    }
+
+    private int GetConfiguredBiomeCount()
+    {
+        if (biomes == null || biomes.Length == 0)
+            return 0;
+
+        int count = 0;
+        for (int i = 0; i < biomes.Length; i++)
+        {
+            if (biomes[i] != null && biomes[i].IsConfigured)
+                count++;
+            else
+                break;
+        }
+
+        return count;
     }
 
     private void OnValidate()
     {
-        chunkSize = RequiredChunkSize;
-        activeChunkRadius = Mathf.Max(0, activeChunkRadius);
-        chunkRefreshInterval = Mathf.Max(0.05f, chunkRefreshInterval);
-        maxMapSizeTiles.x = Mathf.Max(RequiredChunkSize, maxMapSizeTiles.x);
-        maxMapSizeTiles.y = Mathf.Max(RequiredChunkSize, maxMapSizeTiles.y);
-    }
-
-    private void UnloadChunk(Vector2Int coord)
-    {
-        if (!loadedChunks.TryGetValue(coord, out Tilemap tilemap))
-            return;
-
-        loadedChunks.Remove(coord);
-
-        if (tilemap != null)
-            Destroy(tilemap.gameObject);
-    }
-
-    private void UnloadAllChunks()
-    {
-        scratchChunkKeys.Clear();
-        foreach (KeyValuePair<Vector2Int, Tilemap> kv in loadedChunks)
-            scratchChunkKeys.Add(kv.Key);
-
-        for (int i = 0; i < scratchChunkKeys.Count; i++)
-            UnloadChunk(scratchChunkKeys[i]);
+        maxMapSizeTiles.x = Mathf.Max(16, maxMapSizeTiles.x);
+        maxMapSizeTiles.y = Mathf.Max(16, maxMapSizeTiles.y);
+        grassThreshold = Mathf.Max(mudThreshold, grassThreshold);
     }
 
     private static uint Hash2D(int x, int y, int s)

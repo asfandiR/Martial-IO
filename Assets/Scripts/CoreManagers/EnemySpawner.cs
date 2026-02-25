@@ -1,23 +1,22 @@
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
-// Spawns enemies using waves and patterns.
-// Responsibilities:
-// - Wave definitions and progression
-// - Spawn patterns (circle, lines, random, etc.)
-// - Communicate with LevelManager for scaling
+// Spawns enemies in progression phases using weighted history between unlocked enemy tiers.
 public class EnemySpawner : MonoBehaviour
 {
     [SerializeField] private EnemyDatabase enemyDatabase;
     [SerializeField] private Transform player;
     [SerializeField] private Camera mainCamera;
 
-    [Header("Wave")]
-    [SerializeField] private float waveInterval = 10f;
-    [SerializeField] private int baseEnemiesPerWave = 5;
-    [SerializeField] private int enemiesPerWaveGrowth = 2;
+    [Header("Phase Progression")]
     [SerializeField] private float spawnInterval = 0.3f;
+    [SerializeField] private float firstPhaseDurationSeconds = 15f;
+    [SerializeField] private float phaseDurationGrowthSeconds = 5f;
+    [SerializeField, Range(0f, 1f)] private float phaseHistoryInertia = 0.5f;
+    [SerializeField] private float postFinalPhaseQualityGrowth = 0.03f;
+    [SerializeField] private float postFinalPhaseExtraSpawnsGrowth = 0.25f;
 
     [Header("Spawn Position")]
     [SerializeField] private float offscreenMargin = 2f;
@@ -26,9 +25,12 @@ public class EnemySpawner : MonoBehaviour
     [SerializeField] private float fallbackMaxRadius = 14f;
 
     private Coroutine waveRoutine;
-    private int waveIndex;
+    private int phaseIndex;
     private LevelManager levelManager;
     private bool warnedPoolMissing;
+
+    private readonly List<int> difficultyPhases = new List<int>(16);
+    private readonly List<List<EnemyData>> enemiesByPhase = new List<List<EnemyData>>(16);
 
     private void Awake()
     {
@@ -44,42 +46,104 @@ public class EnemySpawner : MonoBehaviour
     private void Start()
     {
         levelManager = LevelManager.Instance;
-        waveRoutine = StartCoroutine(WaveLoop());
+        RebuildPhaseCache();
+        waveRoutine = StartCoroutine(PhaseLoop());
     }
 
-    private IEnumerator WaveLoop()
+    private IEnumerator PhaseLoop()
     {
         while (true)
         {
-            int count = baseEnemiesPerWave + waveIndex * enemiesPerWaveGrowth;
-            count = Mathf.Max(1, count);
-
-            for (int i = 0; i < count; i++)
+            if (!HasSpawnableEnemies())
             {
-                SpawnEnemy();
-                if (spawnInterval > 0f)
-                    yield return new WaitForSeconds(spawnInterval);
+                yield return null;
+                continue;
             }
 
-            waveIndex += 1;
-            if (waveInterval > 0f)
-                yield return new WaitForSeconds(waveInterval);
-            else
-                yield return null;
+            if (difficultyPhases.Count == 0)
+                RebuildPhaseCache();
+
+            int totalPhases = Mathf.Max(1, difficultyPhases.Count);
+            int unlockedPhases = Mathf.Min(totalPhases, phaseIndex + 1);
+            int overflowPhases = Mathf.Max(0, phaseIndex - (totalPhases - 1));
+            float[] phaseWeights = CalculateSpawnWeights(unlockedPhases, phaseHistoryInertia);
+
+            float phaseDuration = Mathf.Max(0.01f, firstPhaseDurationSeconds + (phaseIndex * phaseDurationGrowthSeconds));
+            float phaseEndTime = Time.time + phaseDuration;
+
+            while (Time.time < phaseEndTime)
+            {
+                float baseDifficultyMultiplier = levelManager != null ? levelManager.DifficultyMultiplier : 1f;
+                float phaseQualityMultiplier = 1f + (overflowPhases * Mathf.Max(0f, postFinalPhaseQualityGrowth));
+                float difficultyMultiplier = baseDifficultyMultiplier * phaseQualityMultiplier;
+
+                int spawnsThisTick = 1 + Mathf.FloorToInt(Mathf.Max(0f, overflowPhases) * Mathf.Max(0f, postFinalPhaseExtraSpawnsGrowth));
+                spawnsThisTick = Mathf.Max(1, spawnsThisTick);
+
+                for (int i = 0; i < spawnsThisTick; i++)
+                    SpawnEnemyFromPhases(unlockedPhases, phaseWeights, difficultyMultiplier);
+
+                if (spawnInterval > 0f)
+                    yield return new WaitForSeconds(spawnInterval);
+                else
+                    yield return null;
+            }
+
+            phaseIndex += 1;
         }
     }
 
-    private void SpawnEnemy()
+    private bool HasSpawnableEnemies()
     {
-        if (enemyDatabase == null || enemyDatabase.enemies.Count == 0) return;
+        return enemyDatabase != null && enemyDatabase.enemies != null && enemyDatabase.enemies.Count > 0;
+    }
 
-        int difficultyStep = levelManager != null ? levelManager.DifficultyStep : 0;
-        float difficultyMultiplier = levelManager != null ? levelManager.DifficultyMultiplier : 1f;
+    private void RebuildPhaseCache()
+    {
+        difficultyPhases.Clear();
+        enemiesByPhase.Clear();
 
-        var candidates = enemyDatabase.GetCandidates(difficultyStep);
-        if (candidates.Count == 0) candidates = enemyDatabase.enemies;
+        if (!HasSpawnableEnemies())
+            return;
 
-        var data = PickWeighted(candidates);
+        var uniqueSteps = new SortedSet<int>();
+        for (int i = 0; i < enemyDatabase.enemies.Count; i++)
+        {
+            var enemy = enemyDatabase.enemies[i];
+            if (enemy == null) continue;
+            uniqueSteps.Add(Mathf.Max(0, enemy.minDifficultyStep));
+        }
+
+        foreach (int step in uniqueSteps)
+        {
+            difficultyPhases.Add(step);
+            enemiesByPhase.Add(new List<EnemyData>(8));
+        }
+
+        if (difficultyPhases.Count == 0)
+            return;
+
+        for (int i = 0; i < enemyDatabase.enemies.Count; i++)
+        {
+            var enemy = enemyDatabase.enemies[i];
+            if (enemy == null) continue;
+
+            int step = Mathf.Max(0, enemy.minDifficultyStep);
+            int phaseListIndex = difficultyPhases.IndexOf(step);
+            if (phaseListIndex >= 0)
+                enemiesByPhase[phaseListIndex].Add(enemy);
+        }
+    }
+
+    private void SpawnEnemyFromPhases(int unlockedPhases, float[] phaseWeights, float difficultyMultiplier)
+    {
+        if (!HasSpawnableEnemies()) return;
+
+        var phaseCandidates = PickPhaseCandidates(unlockedPhases, phaseWeights);
+        if (phaseCandidates == null || phaseCandidates.Count == 0)
+            phaseCandidates = enemyDatabase.enemies;
+
+        var data = PickWeighted(phaseCandidates);
         if (data == null || data.prefab == null) return;
 
         Vector3 pos = GetOffscreenSpawnPosition();
@@ -107,6 +171,54 @@ public class EnemySpawner : MonoBehaviour
             controller.Configure(data, difficultyMultiplier);
     }
 
+    private List<EnemyData> PickPhaseCandidates(int unlockedPhases, float[] phaseWeights)
+    {
+        if (difficultyPhases.Count == 0 || enemiesByPhase.Count == 0)
+            return null;
+
+        int phasePoolCount = Mathf.Clamp(unlockedPhases, 1, enemiesByPhase.Count);
+        int pickedPhaseLocalIndex = PickWeightedIndex(phaseWeights, phasePoolCount);
+        pickedPhaseLocalIndex = Mathf.Clamp(pickedPhaseLocalIndex, 0, phasePoolCount - 1);
+
+        var list = enemiesByPhase[pickedPhaseLocalIndex];
+        if (list != null && list.Count > 0)
+            return list;
+
+        for (int i = phasePoolCount - 1; i >= 0; i--)
+        {
+            list = enemiesByPhase[i];
+            if (list != null && list.Count > 0)
+                return list;
+        }
+
+        return null;
+    }
+
+    private static int PickWeightedIndex(float[] weights, int count)
+    {
+        if (weights == null || weights.Length == 0 || count <= 0)
+            return 0;
+
+        int safeCount = Mathf.Min(count, weights.Length);
+        float total = 0f;
+        for (int i = 0; i < safeCount; i++)
+            total += Mathf.Max(0f, weights[i]);
+
+        if (total <= 0.0001f)
+            return safeCount - 1;
+
+        float roll = UnityEngine.Random.value * total;
+        float sum = 0f;
+        for (int i = 0; i < safeCount; i++)
+        {
+            sum += Mathf.Max(0f, weights[i]);
+            if (roll <= sum)
+                return i;
+        }
+
+        return safeCount - 1;
+    }
+
     private Vector3 GetOffscreenSpawnPosition()
     {
         if (player == null || mainCamera == null)
@@ -123,20 +235,20 @@ public class EnemySpawner : MonoBehaviour
         for (int attempt = 0; attempt < 12; attempt++)
         {
             Vector3 candidate;
-            int side = Random.Range(0, 4);
+            int side = UnityEngine.Random.Range(0, 4);
             switch (side)
             {
                 case 0: // left
-                    candidate = new Vector3(left, Random.Range(bottom, top), player.position.z);
+                    candidate = new Vector3(left, UnityEngine.Random.Range(bottom, top), player.position.z);
                     break;
                 case 1: // right
-                    candidate = new Vector3(right, Random.Range(bottom, top), player.position.z);
+                    candidate = new Vector3(right, UnityEngine.Random.Range(bottom, top), player.position.z);
                     break;
                 case 2: // bottom
-                    candidate = new Vector3(Random.Range(left, right), bottom, player.position.z);
+                    candidate = new Vector3(UnityEngine.Random.Range(left, right), bottom, player.position.z);
                     break;
                 default: // top
-                    candidate = new Vector3(Random.Range(left, right), top, player.position.z);
+                    candidate = new Vector3(UnityEngine.Random.Range(left, right), top, player.position.z);
                     break;
             }
 
@@ -185,8 +297,8 @@ public class EnemySpawner : MonoBehaviour
     private Vector3 GetFallbackPosition()
     {
         Vector3 center = player != null ? player.position : transform.position;
-        float radius = Random.Range(fallbackMinRadius, fallbackMaxRadius);
-        float angle = Random.Range(0f, Mathf.PI * 2f);
+        float radius = UnityEngine.Random.Range(fallbackMinRadius, fallbackMaxRadius);
+        float angle = UnityEngine.Random.Range(0f, Mathf.PI * 2f);
         return center + new Vector3(Mathf.Cos(angle) * radius, Mathf.Sin(angle) * radius, center.z);
     }
 
@@ -194,17 +306,54 @@ public class EnemySpawner : MonoBehaviour
     {
         int total = 0;
         for (int i = 0; i < list.Count; i++)
+        {
+            if (list[i] == null) continue;
             total += Mathf.Max(1, list[i].weight);
+        }
 
-        int roll = Random.Range(0, total);
+        if (total <= 0)
+            return list.Count > 0 ? list[0] : null;
+
+        int roll = UnityEngine.Random.Range(0, total);
         int sum = 0;
         for (int i = 0; i < list.Count; i++)
         {
+            if (list[i] == null) continue;
             sum += Mathf.Max(1, list[i].weight);
             if (roll < sum)
                 return list[i];
         }
 
         return list.Count > 0 ? list[0] : null;
+    }
+
+    private static float[] CalculateSpawnWeights(int n, float q)
+    {
+        if (n <= 0) return Array.Empty<float>();
+        if (n == 1) return new[] { 1.0f };
+
+        float[] weights = new float[n];
+
+        // Most recent phase always keeps half of the probability mass.
+        weights[n - 1] = 0.5f;
+
+        float sumPrev = 0f;
+        float currentPower = 1.0f;
+
+        for (int i = n - 2; i >= 0; i--)
+        {
+            weights[i] = currentPower;
+            sumPrev += currentPower;
+            currentPower *= q;
+        }
+
+        float normalizationFactor = (sumPrev > 0.0001f) ? (0.5f / sumPrev) : 0f;
+        for (int i = 0; i < n - 1; i++)
+            weights[i] *= normalizationFactor;
+
+        if (sumPrev <= 0.0001f)
+            weights[n - 2] = 0.5f;
+
+        return weights;
     }
 }

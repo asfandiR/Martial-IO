@@ -1,5 +1,6 @@
 ﻿using System.Text;
 using UnityEngine;
+using System.Collections.Generic;
 using UnityEngine.Events;
 using UnityEngine.UI;
 using TMPro;
@@ -123,15 +124,29 @@ public class LevelUpUI : MonoBehaviour
 
         float levelGrowth = abilityManager != null ? abilityManager.GetLevelGrowthPercent(ability) : 0f;
 
-        return $"{ability.abilityName}\n" +
-               $"Growth/level: +{levelGrowth * 100f:0.#}%\n" +
-               $"Damage: {ToDeltaPercent(damage)}\n" +
-               $"Cooldown time: {ToDeltaPercent(cooldown)}\n" +
-               $"Projectile Speed: {ToDeltaPercent(speed)}\n" +
-               $"Pierce: {ToDeltaPercent(pierce)}\n" +
-               $"Lifetime: {ToDeltaPercent(lifetime)}\n" +
-               $"Crit Chance: {ToDeltaPercent(critChance)}\n" +
-               $"Crit Damage: {ToDeltaPercent(critDamage)}";
+        var lines = new List<string> { ability.abilityName };
+
+        if (!Mathf.Approximately(levelGrowth, 0f))
+            lines.Add($"Growth/level: +{levelGrowth * 100f:0.#}%");
+
+        void AddStatLine(string label, float value)
+        {
+            string deltaText = ToDeltaPercent(value);
+            if (deltaText == "0%" || deltaText == "+0%" || deltaText == "-0%")
+                return;
+
+            lines.Add($"{label}: {deltaText}");
+        }
+
+        AddStatLine("Damage", damage);
+        AddStatLine("Cooldown time", cooldown);
+        AddStatLine("Projectile Speed", speed);
+        AddStatLine("Pierce", pierce);
+        AddStatLine("Lifetime", lifetime);
+        AddStatLine("Crit Chance", critChance);
+        AddStatLine("Crit Damage", critDamage);
+
+        return string.Join("\n", lines);
     }
 
     private void HandleStateChanged(GameManager.GameState state)
