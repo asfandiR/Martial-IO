@@ -227,6 +227,9 @@ public class RelicEdgeSpawner : MonoBehaviour
             return null;
         }
 
+        if (inventory.IsInventoryFull)
+            return null;
+
         List<RelicData> candidates = new List<RelicData>(allRelics.Count);
         for (int i = 0; i < allRelics.Count; i++)
         {

@@ -8,8 +8,10 @@ public class RunScoreUI : MonoBehaviour
 {
     [Header("UI")]
     [SerializeField] private TMP_Text hudScoreText; // Ссылка на текст в HUD (во время игры)
+    [SerializeField] private TMP_Text hudCoinsText;
     [SerializeField] private TMP_Text scoreText;
     [SerializeField] private TMP_Text bestScoreText;
+    [SerializeField] private TMP_Text coinsText;
     [SerializeField] private Button playAgainButton;
 
     [Header("Tracking")]
@@ -46,6 +48,7 @@ public class RunScoreUI : MonoBehaviour
 
         UpdateBestScoreText(BestScore);
         UpdateScoreText(0);
+        UpdateCoinsText();
     }
 
     private void OnEnable()
@@ -53,12 +56,17 @@ public class RunScoreUI : MonoBehaviour
         ResolvePlayerRefs();
         if (playerHealth != null)
             playerHealth.OnDeath += HandlePlayerDeath;
+        if (saveSystem != null)
+            saveSystem.OnGoldChanged += HandleGoldChanged;
+        UpdateCoinsText();
     }
 
     private void OnDisable()
     {
         if (playerHealth != null)
             playerHealth.OnDeath -= HandlePlayerDeath;
+        if (saveSystem != null)
+            saveSystem.OnGoldChanged -= HandleGoldChanged;
 
         if (playAgainButton != null)
             playAgainButton.onClick.RemoveListener(PlayAgain);
@@ -148,6 +156,20 @@ public class RunScoreUI : MonoBehaviour
     {
         if (bestScoreText != null)
             bestScoreText.text = $"Best: {best}";
+    }
+
+    private void UpdateCoinsText()
+    {
+        int coins = saveSystem != null ? saveSystem.Gold : 0;
+        if (hudCoinsText != null)
+            hudCoinsText.text = $"{coins}";
+        if (coinsText != null)
+            coinsText.text = $"Coins: {coins}";
+    }
+
+    private void HandleGoldChanged(int _)
+    {
+        UpdateCoinsText();
     }
 
     private void ResolveSaveSystem()

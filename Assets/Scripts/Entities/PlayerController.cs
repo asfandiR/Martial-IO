@@ -1,5 +1,9 @@
 ﻿using System;
 using UnityEngine;
+using UnityEngine.UI;
+#if ENABLE_INPUT_SYSTEM
+using UnityEngine.InputSystem;
+#endif
 
 // Player movement and input handling.
 // Responsibilities:
@@ -42,10 +46,25 @@ public class PlayerController : MonoBehaviour
 
     private Vector2 ReadMoveInput()
     {
-        if (joystick != null)
-            return new Vector2(joystick.Horizontal, joystick.Vertical);
+#if ENABLE_INPUT_SYSTEM
+        Vector2 input = Vector2.zero;
+        Keyboard kb = Keyboard.current;
+        if (kb != null)
+        {
+            if (kb.aKey.isPressed || kb.leftArrowKey.isPressed) input.x -= 1f;
+            if (kb.dKey.isPressed || kb.rightArrowKey.isPressed) input.x += 1f;
+            if (kb.sKey.isPressed || kb.downArrowKey.isPressed) input.y -= 1f;
+            if (kb.wKey.isPressed || kb.upArrowKey.isPressed) input.y += 1f;
+        }
 
+        Gamepad pad = Gamepad.current;
+        if (pad != null)
+            input += pad.leftStick.ReadValue();
+
+        return input;
+#else
         return new Vector2(Input.GetAxis("Horizontal"), Input.GetAxis("Vertical"));
+#endif
     }
 
     private void Awake()
@@ -198,4 +217,3 @@ public class PlayerController : MonoBehaviour
         footstepTimer = Mathf.Max(0.05f, interval);
     }
 }
-

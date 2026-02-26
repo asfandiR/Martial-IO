@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using UnityEngine;
 
@@ -23,6 +24,7 @@ public class SaveSystem : MonoBehaviour
 
     public int Gold => data.gold;
     public int BestScore => data.bestScore;
+    public event Action<int> OnGoldChanged;
 
     private SaveData data = new SaveData();
 
@@ -49,6 +51,7 @@ public class SaveSystem : MonoBehaviour
         if (amount <= 0) return;
         data.gold += amount;
         Save();
+        OnGoldChanged?.Invoke(data.gold);
     }
 
     public bool SpendGold(int amount)
@@ -58,6 +61,7 @@ public class SaveSystem : MonoBehaviour
 
         data.gold -= amount;
         Save();
+        OnGoldChanged?.Invoke(data.gold);
         return true;
     }
 
@@ -122,6 +126,7 @@ public class SaveSystem : MonoBehaviour
         if (!PlayerPrefs.HasKey(SaveKey))
         {
             data = new SaveData();
+            OnGoldChanged?.Invoke(data.gold);
             return;
         }
 
@@ -131,12 +136,14 @@ public class SaveSystem : MonoBehaviour
             data.purchasedUpgrades = new List<string>();
         if (data.ownedRelicIds == null)
             data.ownedRelicIds = new List<string>();
+        OnGoldChanged?.Invoke(data.gold);
     }
 
     public void Wipe()
     {
         data = new SaveData();
         PlayerPrefs.DeleteKey(SaveKey);
+        OnGoldChanged?.Invoke(data.gold);
     }
     private void OnValidate()
     {

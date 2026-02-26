@@ -8,6 +8,8 @@ public class InventoryPanelUI : MonoBehaviour
 {
     [Header("Left Panel")]
     [SerializeField] private TMP_Text totalBoostText;
+    [SerializeField] private TMP_Text walletText;
+    [SerializeField] private TMP_Text capacityText;
 
     [Header("Grid")]
     [SerializeField] private RectTransform gridContent;
@@ -39,6 +41,7 @@ public class InventoryPanelUI : MonoBehaviour
         }
 
         BuildTotalBoostText(inventory);
+        BuildWalletAndCapacityText(inventory);
         BuildGrid(inventory);
     }
 
@@ -65,6 +68,15 @@ public class InventoryPanelUI : MonoBehaviour
         float percent = inventory.GetTotalBoostPercent(stat);
         sb.Append(label).Append(": +").Append(percent.ToString("0.#")).Append("%");
         sb.Append(" (").Append(count).AppendLine(")");
+    }
+
+    private void BuildWalletAndCapacityText(InventoryManager inventory)
+    {
+        if (walletText != null)
+            walletText.text = $"Coins: {inventory.WalletCoins}";
+
+        if (capacityText != null)
+            capacityText.text = $"Relics: {inventory.CurrentRelicCount}/{inventory.MaxRelicCapacity}";
     }
 
     private void BuildGrid(InventoryManager inventory)
@@ -110,12 +122,23 @@ public class InventoryPanelUI : MonoBehaviour
     private void Subscribe()
     {
         if (InventoryManager.Instance != null)
+        {
             InventoryManager.Instance.OnInventoryChanged += Refresh;
+            InventoryManager.Instance.OnWalletChanged += HandleWalletChanged;
+        }
     }
 
     private void Unsubscribe()
     {
         if (InventoryManager.Instance != null)
+        {
             InventoryManager.Instance.OnInventoryChanged -= Refresh;
+            InventoryManager.Instance.OnWalletChanged -= HandleWalletChanged;
+        }
+    }
+
+    private void HandleWalletChanged(int _)
+    {
+        Refresh();
     }
 }

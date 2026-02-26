@@ -87,14 +87,17 @@ public class RelicPickup : MonoBehaviour
     public bool Collect()
     {
         if (collected) return false;
-        collected = true;
 
         bool added = false;
         if (relicData != null && InventoryManager.Instance != null)
             added = InventoryManager.Instance.AddRelic(relicData);
 
+        if (!added)
+            return false;
+
+        collected = true;
         ReturnToPoolOrDestroy();
-        return added;
+        return true;
     }
 
     public void SetRelicData(RelicData data)
