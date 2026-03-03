@@ -57,6 +57,7 @@ public class AbilityManager : MonoBehaviour
     private float cooldownMultiplier = 1f;
     [SerializeField, Min(0f)] private float projectileCooldownBase = 2f;
     [SerializeField] private float swordSectorBonusPerSkill = 15f;
+    [SerializeField, Min(0f)] private float swordScaleYBonusPerSpearmanSkill = 0.35f;
 
     public IReadOnlyList<AbilityData> Abilities => abilities;
     public float CooldownMultiplier => cooldownMultiplier;
@@ -277,8 +278,8 @@ public class AbilityManager : MonoBehaviour
                 case AbilityTag.Paladin: // Protection -> Sector Coverage
                     if (weaponController != null) weaponController.AddSwordSectorAngle(swordSectorBonusPerSkill);
                     break;
-                case AbilityTag.Spearman: // Reach -> Orbit Radius
-                    if (weaponController != null) weaponController.AddSwordRadius(0.35f);
+                case AbilityTag.Spearman: // Reach -> Sword Y scale (max x5)
+                    if (weaponController != null) weaponController.AddSwordScaleY(swordScaleYBonusPerSpearmanSkill, 5f);
                     break;
                 case AbilityTag.Blacksmith: // Quality -> Speed + Damage mix
                     if (weaponController != null)

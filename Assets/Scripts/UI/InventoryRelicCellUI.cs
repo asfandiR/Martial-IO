@@ -1,6 +1,7 @@
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
+using System;
 
 // Single cell view for inventory GridLayoutGroup.
 public class InventoryRelicCellUI : MonoBehaviour
@@ -11,8 +12,10 @@ public class InventoryRelicCellUI : MonoBehaviour
     [SerializeField] private TMP_Text rarityText;
     [SerializeField] private TMP_Text priceText;
     [SerializeField] private Button sellButton;
+    [SerializeField] private Button selectButton;
 
     private RelicData boundRelic;
+    private Action<RelicData> onSelectRelic;
 
     private void Awake()
     {
@@ -21,16 +24,29 @@ public class InventoryRelicCellUI : MonoBehaviour
             sellButton.onClick.RemoveListener(SellBoundRelic);
             sellButton.onClick.AddListener(SellBoundRelic);
         }
+
+        if (selectButton == null)
+            selectButton = GetComponentInChildren<Button>(true);
+
+        if (selectButton != null)
+        {
+            selectButton.onClick.RemoveListener(HandleSelectClicked);
+            selectButton.onClick.AddListener(HandleSelectClicked);
+        }
     }
 
     private void OnDestroy()
     {
         if (sellButton != null)
             sellButton.onClick.RemoveListener(SellBoundRelic);
+
+        if (selectButton != null)
+            selectButton.onClick.RemoveListener(HandleSelectClicked);
     }
 
     public void Bind(RelicData relic)
     {
+        onSelectRelic = null;
         boundRelic = relic;
 
         if (relic == null)
@@ -63,10 +79,57 @@ public class InventoryRelicCellUI : MonoBehaviour
             sellButton.interactable = InventoryManager.Instance != null;
     }
 
+    public void BindShopOffer(RelicData relic, Action<RelicData> onSelect)
+    {
+        onSelectRelic = onSelect;
+        boundRelic = relic;
+
+        if (relic == null)
+        {
+            if (iconImage != null) iconImage.sprite = null;
+            if (nameText != null) nameText.text = "-";
+            if (statText != null) statText.text = string.Empty;
+            if (rarityText != null) rarityText.text = string.Empty;
+            if (priceText != null) priceText.text = string.Empty;
+            if (sellButton != null) sellButton.interactable = false;
+            if (selectButton != null) selectButton.interactable = false;
+            return;
+        }
+
+        if (iconImage != null)
+            iconImage.sprite = relic.icon;
+
+        if (nameText != null)
+            nameText.text = relic.Rarity.ToString().ToUpperInvariant();
+
+        if (statText != null)
+            statText.text = string.Empty;
+
+        if (rarityText != null)
+            rarityText.text = string.Empty;
+
+        if (priceText != null)
+            priceText.text = string.Empty;
+
+        if (sellButton != null)
+            sellButton.interactable = false;
+
+        if (selectButton != null)
+            selectButton.interactable = true;
+    }
+
     public void SellBoundRelic()
     {
         if (boundRelic == null) return;
         InventoryManager.Instance?.SellRelic(boundRelic);
+    }
+
+    private void HandleSelectClicked()
+    {
+        if (boundRelic == null || onSelectRelic == null)
+            return;
+
+        onSelectRelic.Invoke(boundRelic);
     }
 
     private static string GetStatLabel(RelicData.RelicStatType stat)

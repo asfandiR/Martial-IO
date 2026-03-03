@@ -11,6 +11,7 @@ public class SwordOrbitController : MonoBehaviour
         public Transform transform;
         public SpriteRenderer renderer;
         public Collider2D collider;
+        public Vector3 baseLocalScale;
     }
 private string anim="Change";
     [Header("Sword")]
@@ -46,6 +47,7 @@ private string anim="Change";
     private float swordOrbitSpeedMultiplier = 1f;
     private float swordDamageMultiplier = 1f;
     private float additionalOrbitRadius = 0f;
+    private float swordScaleYMultiplier = 1f;
 
     private void Awake()
     {
@@ -184,9 +186,11 @@ Animators = new Animator[swordTransforms.Length];
             transform = tr,
             renderer = sr,
             collider = col,
+            baseLocalScale = tr.localScale,
         };
 
         swordOrbiters.Add(orbiter);
+        ApplySwordScaleYToOrbiter(orbiter);
     }
 
     private bool IsSwordAbility(AbilityData ability)
@@ -244,6 +248,32 @@ Animators = new Animator[swordTransforms.Length];
     public void MultiplySwordDamage(float multiplier)
     {
         swordDamageMultiplier *= Mathf.Max(0.1f, multiplier);
+    }
+
+    public void AddSwordScaleY(float scaleDelta, float maxMultiplier = 5f)
+    {
+        float clampedMax = Mathf.Max(1f, maxMultiplier);
+        swordScaleYMultiplier = Mathf.Clamp(swordScaleYMultiplier + scaleDelta, 1f, clampedMax);
+        ApplySwordScaleY();
+    }
+
+    private void ApplySwordScaleY()
+    {
+        for (int i = 0; i < swordOrbiters.Count; i++)
+            ApplySwordScaleYToOrbiter(swordOrbiters[i]);
+    }
+
+    private void ApplySwordScaleYToOrbiter(SwordOrbiter orbiter)
+    {
+        if (orbiter == null || orbiter.transform == null)
+            return;
+
+        Vector3 baseScale = orbiter.baseLocalScale;
+        orbiter.transform.localScale = new Vector3(
+            baseScale.x,
+            baseScale.y * swordScaleYMultiplier,
+            baseScale.z
+        );
     }
 
    /* private void OnValidate()
