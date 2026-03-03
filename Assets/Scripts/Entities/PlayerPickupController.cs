@@ -1,7 +1,7 @@
 using System;
 using UnityEngine;
 
-// Handles player pickup/magnet logic for XP gems, relics and effectors.
+// Handles player pickup/magnet logic for XP gems, gold and effectors.
 public class PlayerPickupController : MonoBehaviour
 {
     [Header("XP Pickup")]
@@ -11,12 +11,12 @@ public class PlayerPickupController : MonoBehaviour
     [SerializeField] private int maxXpGemChecks = 64;
     [SerializeField] private ParticleSystem xpPickupEffect;
 
-    [Header("Relic Pickup")]
-    [SerializeField] private float relicPickupRadius = 1.5f;
-    [SerializeField] private float relicMagnetRadius = 5.5f;
-    [SerializeField] private LayerMask relicMask;
-    [SerializeField] private int maxRelicChecks = 64;
-    [SerializeField] private bool useXpPickupEffectForRelics = true;
+    [Header("Gold Pickup")]
+    [SerializeField] private float goldPickupRadius = 1.5f;
+    [SerializeField] private float goldMagnetRadius = 5.5f;
+    [SerializeField] private LayerMask goldMask;
+    [SerializeField] private int maxGoldChecks = 64;
+    [SerializeField] private bool useXpPickupEffectForGold = true;
 
     [Header("Effector Pickup")]
     [SerializeField] private float effectorPickupRadius = 1.5f;
@@ -28,7 +28,7 @@ public class PlayerPickupController : MonoBehaviour
     public event Action<int> OnCollectXp;
 
     private Collider2D[] xpGemHits;
-    private Collider2D[] relicHits;
+    private Collider2D[] goldHits;
     private Collider2D[] effectorHits;
 
     private void Awake()
@@ -37,28 +37,28 @@ public class PlayerPickupController : MonoBehaviour
             Debug.LogWarning("XP Pickup Effect reference is missing on PlayerPickupController.");
 
         xpGemHits = new Collider2D[Mathf.Max(8, maxXpGemChecks)];
-        relicHits = new Collider2D[Mathf.Max(8, maxRelicChecks)];
+        goldHits = new Collider2D[Mathf.Max(8, maxGoldChecks)];
         effectorHits = new Collider2D[Mathf.Max(8, maxEffectorChecks)];
     }
 
     private void Update()
     {
         HandleXpGemsInRange();
-        HandleRelicsInRange();
+        HandleGoldInRange();
         HandleEffectorsInRange();
     }
 
     private void OnTriggerEnter2D(Collider2D other)
     {
         TryCollectXp(other);
-        TryCollectRelic(other);
+        TryCollectGold(other);
         TryCollectEffector(other);
     }
 
     private void OnTriggerEnter(Collider other)
     {
         TryCollectXp(other);
-        TryCollectRelic(other);
+        TryCollectGold(other);
         TryCollectEffector(other);
     }
 
@@ -100,41 +100,41 @@ public class PlayerPickupController : MonoBehaviour
         }
     }
 
-    private void TryCollectRelic(Component source)
+    private void TryCollectGold(Component source)
     {
         if (source == null) return;
-        RelicPickup relic = source.GetComponentInParent<RelicPickup>();
-        if (relic == null) return;
+        GoldPickup gold = source.GetComponentInParent<GoldPickup>();
+        if (gold == null) return;
 
-        if (useXpPickupEffectForRelics && xpPickupEffect != null)
+        if (useXpPickupEffectForGold && xpPickupEffect != null)
             xpPickupEffect.Play();
 
-        CollectRelic(relic);
+        CollectGold(gold);
     }
 
-    private void HandleRelicsInRange()
+    private void HandleGoldInRange()
     {
-        float magnetRadius = Mathf.Max(relicPickupRadius, relicMagnetRadius);
-        int count = OverlapCircle((Vector2)transform.position, magnetRadius, relicHits, GetRelicMask());
+        float magnetRadius = Mathf.Max(goldPickupRadius, goldMagnetRadius);
+        int count = OverlapCircle((Vector2)transform.position, magnetRadius, goldHits, GetGoldMask());
         if (count <= 0) return;
 
-        float pickupSqr = relicPickupRadius * relicPickupRadius;
+        float pickupSqr = goldPickupRadius * goldPickupRadius;
 
         for (int i = 0; i < count; i++)
         {
-            Collider2D col = relicHits[i];
+            Collider2D col = goldHits[i];
             if (col == null) continue;
 
-            RelicPickup relic = col.GetComponentInParent<RelicPickup>();
-            if (relic == null) continue;
+            GoldPickup gold = col.GetComponentInParent<GoldPickup>();
+            if (gold == null) continue;
 
-            Vector3 delta = relic.transform.position - transform.position;
+            Vector3 delta = gold.transform.position - transform.position;
             delta.z = 0f;
 
             if (delta.sqrMagnitude <= pickupSqr)
-                CollectRelic(relic);
+                CollectGold(gold);
             else
-                relic.MagnetizeTo(transform, relicPickupRadius);
+                gold.MagnetizeTo(transform, goldPickupRadius);
         }
     }
 
@@ -188,11 +188,12 @@ public class PlayerPickupController : MonoBehaviour
         }
     }
 
-    private void CollectRelic(RelicPickup relic)
+    private void CollectGold(GoldPickup gold)
     {
-        if (relic == null) return;
-        if (relic.Collect())
-            SoundManager.Instance?.PlaySfx(GameSfxId.PickupRelic);
+        if (gold == null) return;
+        int collectedAmount = gold.Collect();
+        if (collectedAmount > 0)
+            SoundManager.Instance?.PlaySfx(GameSfxId.PickupXp);
     }
 
     private void CollectEffector(EffectorPickup effector)
@@ -207,9 +208,9 @@ public class PlayerPickupController : MonoBehaviour
         return xpGemMask.value == 0 ? ~0 : xpGemMask.value;
     }
 
-    private int GetRelicMask()
+    private int GetGoldMask()
     {
-        return relicMask.value == 0 ? ~0 : relicMask.value;
+        return goldMask.value == 0 ? ~0 : goldMask.value;
     }
 
     private int GetEffectorMask()
