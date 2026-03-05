@@ -32,7 +32,7 @@ public class AbilityManager : MonoBehaviour
     };
 
     [SerializeField] private List<AbilityData> abilities = new List<AbilityData>(8);
-    private readonly List<float> cooldownTimers = new List<float>(8);
+    private readonly List<float> cooldownReadyAt = new List<float>(8);
 
     [Header("Progression")]
     [SerializeField, Range(0f, 1f)] private float baseLuck = 0.35f;
@@ -71,23 +71,13 @@ public class AbilityManager : MonoBehaviour
         SyncCooldowns();
     }
 
-    private void Update()
-    {
-        float dt = Time.deltaTime;
-        for (int i = 0; i < cooldownTimers.Count; i++)
-        {
-            if (cooldownTimers[i] > 0f)
-                cooldownTimers[i] = Mathf.Max(0f, cooldownTimers[i] - dt);
-        }
-    }
-
     public void RegisterAbility(AbilityData ability)
     {
         if (ability == null) return;
         if (abilities.Contains(ability)) return;
 
         abilities.Add(ability);
-        cooldownTimers.Add(0f);
+        cooldownReadyAt.Add(0f);
 
         ApplyAbilityPercentEffects(ability);
         ApplyAbilitySideEffects(ability);
@@ -102,13 +92,13 @@ public class AbilityManager : MonoBehaviour
         if (index < 0) return;
 
         abilities.RemoveAt(index);
-        cooldownTimers.RemoveAt(index);
+        cooldownReadyAt.RemoveAt(index);
     }
 
     public bool IsReady(int index)
     {
-        if (index < 0 || index >= cooldownTimers.Count) return false;
-        return cooldownTimers[index] <= 0f;
+        if (index < 0 || index >= cooldownReadyAt.Count) return false;
+        return Time.time >= cooldownReadyAt[index];
     }
 
     public bool TryConsumeCooldown(int index)
@@ -117,7 +107,7 @@ public class AbilityManager : MonoBehaviour
         if (!IsReady(index)) return false;
 
         float cd = GetProjectileCooldownDuration();
-        cooldownTimers[index] = cd;
+        cooldownReadyAt[index] = Time.time + cd;
         return true;
     }
 
@@ -343,9 +333,9 @@ public class AbilityManager : MonoBehaviour
 
     private void SyncCooldowns()
     {
-        cooldownTimers.Clear();
+        cooldownReadyAt.Clear();
         for (int i = 0; i < abilities.Count; i++)
-            cooldownTimers.Add(0f);
+            cooldownReadyAt.Add(0f);
     }
 
     private float GetAbilityStatMultiplier(AbilityData ability, AbilityStat stat)

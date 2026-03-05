@@ -69,10 +69,6 @@ public class ChunkedIsometricWorldController : MonoBehaviour
             GenerateNewMap();
     }
 
-    private void Update()
-    {
-    }
-
     [ContextMenu("Generate New Map")]
     public void GenerateNewMap()
     {

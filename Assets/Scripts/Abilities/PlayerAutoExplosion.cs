@@ -38,6 +38,7 @@ public class PlayerAutoExplosion : MonoBehaviour
     private AbilityManager abilityManager;
     private HealthSystem health;
     private float cooldownTimer;
+    private Coroutine explosionRoutine;
 
     private void Awake()
     {
@@ -48,26 +49,54 @@ public class PlayerAutoExplosion : MonoBehaviour
     private void OnEnable()
     {
         cooldownTimer = castOnStart ? 0f : baseCooldown;
+        if (explosionRoutine != null)
+            StopCoroutine(explosionRoutine);
+        explosionRoutine = StartCoroutine(ExplosionLoop());
     }
 
-    private void Update()
+    private void OnDisable()
     {
-        if (explosionPrefab == null || abilityManager == null)
-            return;
+        if (explosionRoutine != null)
+        {
+            StopCoroutine(explosionRoutine);
+            explosionRoutine = null;
+        }
+    }
 
-        if (health != null && health.IsDead)
-            return;
+    private System.Collections.IEnumerator ExplosionLoop()
+    {
+        while (enabled && gameObject.activeInHierarchy)
+        {
+            if (explosionPrefab == null || abilityManager == null)
+            {
+                yield return null;
+                continue;
+            }
 
-        ExplosionStats stats = BuildStats();
-        if (requirePriestSkill && stats.priestSkillCount <= 0)
-            return;
+            if (health != null && health.IsDead)
+            {
+                yield return null;
+                continue;
+            }
 
-        cooldownTimer -= Time.deltaTime;
-        if (cooldownTimer > 0f)
-            return;
+            ExplosionStats stats = BuildStats();
+            if (requirePriestSkill && stats.priestSkillCount <= 0)
+            {
+                yield return null;
+                continue;
+            }
 
-        SpawnExplosion(stats);
-        cooldownTimer = stats.cooldown;
+            cooldownTimer -= Time.deltaTime;
+            if (cooldownTimer <= 0f)
+            {
+                SpawnExplosion(stats);
+                cooldownTimer = stats.cooldown;
+            }
+
+            yield return null;
+        }
+
+        explosionRoutine = null;
     }
 
     private ExplosionStats BuildStats()

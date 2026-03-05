@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 // Spawns gold pickups on camera borders so half of pickup is visible on screen.
 public class GoldEdgeSpawner : MonoBehaviour
@@ -18,8 +19,8 @@ public class GoldEdgeSpawner : MonoBehaviour
     [SerializeField, Range(0f, 1f)] private float visiblePortion = 0.5f;
     [SerializeField] private float extraInset;
 
-    private float timer;
     private bool warnedPoolMissing;
+    private Coroutine spawnRoutine;
 
     private void Awake()
     {
@@ -36,26 +37,41 @@ public class GoldEdgeSpawner : MonoBehaviour
 
     private void Start()
     {
-        timer = Mathf.Max(0.01f, spawnInterval);
-
         if (spawnOnStart)
             SpawnGoldAtCameraEdge();
+
+        if (repeatSpawn && spawnRoutine == null)
+            spawnRoutine = StartCoroutine(RepeatSpawnLoop());
     }
 
-    private void Update()
+    private void OnEnable()
     {
-        if (!repeatSpawn)
-            return;
+        if (repeatSpawn && spawnRoutine == null && Application.isPlaying)
+            spawnRoutine = StartCoroutine(RepeatSpawnLoop());
+    }
 
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameManager.GameState.Gameplay)
-            return;
+    private void OnDisable()
+    {
+        if (spawnRoutine != null)
+        {
+            StopCoroutine(spawnRoutine);
+            spawnRoutine = null;
+        }
+    }
 
-        timer -= Time.deltaTime;
-        if (timer > 0f)
-            return;
+    private IEnumerator RepeatSpawnLoop()
+    {
+        while (enabled && gameObject.activeInHierarchy && repeatSpawn)
+        {
+            yield return new WaitForSeconds(Mathf.Max(0.01f, spawnInterval));
 
-        timer = Mathf.Max(0.01f, spawnInterval);
-        SpawnGoldAtCameraEdge();
+            if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameManager.GameState.Gameplay)
+                continue;
+
+            SpawnGoldAtCameraEdge();
+        }
+
+        spawnRoutine = null;
     }
 
     [ContextMenu("Spawn Gold At Camera Edge")]

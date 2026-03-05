@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 // Auto-releases temporary VFX either back to ObjectPooler or by Destroy.
 [DisallowMultipleComponent]
@@ -6,24 +7,40 @@ public class TimedAutoRelease : MonoBehaviour
 {
     [SerializeField] private float fallbackLifetimeSeconds = 1.5f;
 
-    private float timer;
+    private Coroutine releaseRoutine;
 
     private void OnEnable()
     {
-        timer = Mathf.Max(0.05f, fallbackLifetimeSeconds);
+        StartReleaseCountdown(fallbackLifetimeSeconds);
+    }
+
+    private void OnDisable()
+    {
+        if (releaseRoutine != null)
+        {
+            StopCoroutine(releaseRoutine);
+            releaseRoutine = null;
+        }
     }
 
     public void Arm(float lifetimeSeconds)
     {
-        timer = Mathf.Max(0.05f, lifetimeSeconds);
+        StartReleaseCountdown(lifetimeSeconds);
     }
 
-    private void Update()
+    private void StartReleaseCountdown(float lifetimeSeconds)
     {
-        timer -= Time.deltaTime;
-        if (timer > 0f)
-            return;
+        if (releaseRoutine != null)
+            StopCoroutine(releaseRoutine);
 
+        float delay = Mathf.Max(0.05f, lifetimeSeconds);
+        releaseRoutine = StartCoroutine(ReleaseAfterDelay(delay));
+    }
+
+    private IEnumerator ReleaseAfterDelay(float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        releaseRoutine = null;
         Release();
     }
 

@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Collections;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -28,6 +29,7 @@ public class EffectorStatusUI : MonoBehaviour
     private readonly List<EffectorRuntimeController.ActiveEffectorSnapshot> snapshots =
         new List<EffectorRuntimeController.ActiveEffectorSnapshot>(16);
     private readonly List<AggregatedStat> aggregated = new List<AggregatedStat>(5);
+    private Coroutine refreshRoutine;
 
     private void Awake()
     {
@@ -38,11 +40,30 @@ public class EffectorStatusUI : MonoBehaviour
     private void OnEnable()
     {
         Refresh();
+        if (refreshRoutine != null)
+            StopCoroutine(refreshRoutine);
+        refreshRoutine = StartCoroutine(RefreshLoop());
     }
 
-    private void Update()
+    private void OnDisable()
     {
-        Refresh();
+        if (refreshRoutine != null)
+        {
+            StopCoroutine(refreshRoutine);
+            refreshRoutine = null;
+        }
+    }
+
+    private IEnumerator RefreshLoop()
+    {
+        var wait = new WaitForSeconds(0.2f);
+        while (enabled && gameObject.activeInHierarchy)
+        {
+            Refresh();
+            yield return wait;
+        }
+
+        refreshRoutine = null;
     }
 
     private void Refresh()

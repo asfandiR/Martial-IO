@@ -1,4 +1,5 @@
 using System;
+using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
@@ -22,6 +23,7 @@ public class LevelManager : MonoBehaviour
 
     private float nextDifficultyTime;
     private GameManager gameManager;
+    private Coroutine tickRoutine;
 
     private void Awake()
     {
@@ -48,21 +50,48 @@ public class LevelManager : MonoBehaviour
     {
         gameManager = GameManager.Instance;
         nextDifficultyTime = difficultyStepInterval;
+        if (tickRoutine == null)
+            tickRoutine = StartCoroutine(TickRoutine());
     }
 
-    private void Update()
+    private void OnEnable()
     {
-        if (gameManager != null && gameManager.CurrentState != GameManager.GameState.Gameplay)
-            return;
+        if (tickRoutine == null && Application.isPlaying)
+            tickRoutine = StartCoroutine(TickRoutine());
+    }
 
-        ElapsedTime += Time.deltaTime;
-        if (ElapsedTime >= nextDifficultyTime)
+    private void OnDisable()
+    {
+        if (tickRoutine != null)
         {
-            DifficultyStep += 1;
-            DifficultyMultiplier += difficultyStepMultiplier;
-            nextDifficultyTime += difficultyStepInterval;
-            OnDifficultyScaled?.Invoke(DifficultyStep, DifficultyMultiplier);
+            StopCoroutine(tickRoutine);
+            tickRoutine = null;
         }
+    }
+
+    private IEnumerator TickRoutine()
+    {
+        while (enabled && gameObject.activeInHierarchy)
+        {
+            if (gameManager == null)
+                gameManager = GameManager.Instance;
+
+            if (gameManager == null || gameManager.CurrentState == GameManager.GameState.Gameplay)
+            {
+                ElapsedTime += Time.deltaTime;
+                if (ElapsedTime >= nextDifficultyTime)
+                {
+                    DifficultyStep += 1;
+                    DifficultyMultiplier += difficultyStepMultiplier;
+                    nextDifficultyTime += difficultyStepInterval;
+                    OnDifficultyScaled?.Invoke(DifficultyStep, DifficultyMultiplier);
+                }
+            }
+
+            yield return null;
+        }
+
+        tickRoutine = null;
     }
 
     public void ResetLevel()

@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 // Lightweight runtime blood stain decal (sprite on ground) that fades out over time.
 [DisallowMultipleComponent]
@@ -13,6 +14,7 @@ public class TemporaryBloodStain : MonoBehaviour
     private float fadeStartNormalized = 0.65f;
     private Color baseColor = new Color(0.45f, 0.05f, 0.05f, 0.55f);
     private float initialAlpha = 0.55f;
+    private Coroutine fadeRoutine;
 
     public static TemporaryBloodStain Spawn(
         Vector3 position,
@@ -40,6 +42,15 @@ public class TemporaryBloodStain : MonoBehaviour
 
         if (transform.localScale == Vector3.zero)
             transform.localScale = Vector3.one;
+    }
+
+    private void OnDisable()
+    {
+        if (fadeRoutine != null)
+        {
+            StopCoroutine(fadeRoutine);
+            fadeRoutine = null;
+        }
     }
 
     public void Configure(float scale, float lifetime, int sortingOrder, string sortingLayerName)
@@ -71,23 +82,36 @@ public class TemporaryBloodStain : MonoBehaviour
             if (!string.IsNullOrWhiteSpace(sortingLayerName))
                 spriteRenderer.sortingLayerName = sortingLayerName;
         }
+
+        if (fadeRoutine != null)
+            StopCoroutine(fadeRoutine);
+        fadeRoutine = StartCoroutine(FadeAndDestroy());
     }
 
-    private void Update()
+    private IEnumerator FadeAndDestroy()
     {
-        lifeTimer += Time.deltaTime;
-        float t = lifeDuration > 0.01f ? Mathf.Clamp01(lifeTimer / lifeDuration) : 1f;
-
-        if (spriteRenderer != null)
+        lifeTimer = 0f;
+        while (true)
         {
-            float fadeT = Mathf.InverseLerp(fadeStartNormalized, 1f, t);
-            Color c = spriteRenderer.color;
-            c.a = initialAlpha * (1f - fadeT);
-            spriteRenderer.color = c;
+            lifeTimer += Time.deltaTime;
+            float t = lifeDuration > 0.01f ? Mathf.Clamp01(lifeTimer / lifeDuration) : 1f;
+
+            if (spriteRenderer != null)
+            {
+                float fadeT = Mathf.InverseLerp(fadeStartNormalized, 1f, t);
+                Color c = spriteRenderer.color;
+                c.a = initialAlpha * (1f - fadeT);
+                spriteRenderer.color = c;
+            }
+
+            if (t >= 1f)
+                break;
+
+            yield return null;
         }
 
-        if (t >= 1f)
-            Destroy(gameObject);
+        fadeRoutine = null;
+        Destroy(gameObject);
     }
 
     private static Sprite GetOrCreateSharedSprite()

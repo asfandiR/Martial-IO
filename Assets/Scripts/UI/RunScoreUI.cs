@@ -2,6 +2,7 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 using UnityEngine.UI;
+using System.Collections;
 
 // Handles run score, best score persistence, and Play Again button on death screen.
 public class RunScoreUI : MonoBehaviour
@@ -24,6 +25,7 @@ public class RunScoreUI : MonoBehaviour
     private int lastShownScore = -1;
     private bool runFinished;
     private SaveSystem saveSystem;
+    private Coroutine scoreRoutine;
 
     public int CurrentScore => Mathf.Max(0, Mathf.FloorToInt(survivalTime) + bonusScore);
     public int BestScore
@@ -54,11 +56,21 @@ public class RunScoreUI : MonoBehaviour
     private void OnEnable()
     {
         ResolvePlayerRefs();
+        if (playAgainButton != null)
+        {
+            playAgainButton.onClick.RemoveListener(PlayAgain);
+            playAgainButton.onClick.AddListener(PlayAgain);
+        }
+
         if (playerHealth != null)
             playerHealth.OnDeath += HandlePlayerDeath;
         if (saveSystem != null)
             saveSystem.OnGoldChanged += HandleGoldChanged;
         UpdateCoinsText();
+
+        if (scoreRoutine != null)
+            StopCoroutine(scoreRoutine);
+        scoreRoutine = StartCoroutine(ScoreLoop());
     }
 
     private void OnDisable()
@@ -70,21 +82,35 @@ public class RunScoreUI : MonoBehaviour
 
         if (playAgainButton != null)
             playAgainButton.onClick.RemoveListener(PlayAgain);
+
+        if (scoreRoutine != null)
+        {
+            StopCoroutine(scoreRoutine);
+            scoreRoutine = null;
+        }
     }
 
-    private void Update()
+    private IEnumerator ScoreLoop()
     {
-        if (runFinished) return;
+        while (enabled && gameObject.activeInHierarchy)
+        {
+            if (!runFinished)
+            {
+                if (GameManager.Instance == null || GameManager.Instance.CurrentState == GameManager.GameState.Gameplay)
+                {
+                    if (useSurvivalTimeAsScore)
+                        survivalTime += Time.deltaTime;
 
-        if (GameManager.Instance != null && GameManager.Instance.CurrentState != GameManager.GameState.Gameplay)
-            return;
+                    int score = CurrentScore;
+                    if (score != lastShownScore)
+                        UpdateScoreText(score);
+                }
+            }
 
-        if (useSurvivalTimeAsScore)
-            survivalTime += Time.deltaTime;
+            yield return null;
+        }
 
-        int score = CurrentScore;
-        if (score != lastShownScore)
-            UpdateScoreText(score);
+        scoreRoutine = null;
     }
 
     public void AddScore(int value)

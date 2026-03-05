@@ -1,4 +1,5 @@
 using UnityEngine;
+using System.Collections;
 
 // Camera shake feedback.
 public class CameraShaker : MonoBehaviour
@@ -12,6 +13,7 @@ public class CameraShaker : MonoBehaviour
     private float shakeTimer;
     private float shakeDuration;
     private float shakeStrength;
+    private Coroutine shakeRoutine;
 
     private void Awake()
     {
@@ -25,19 +27,16 @@ public class CameraShaker : MonoBehaviour
         originalLocalPos = transform.localPosition;
     }
 
-    private void Update()
+    private void OnDisable()
     {
-        if (shakeTimer <= 0f) return;
+        if (shakeRoutine != null)
+        {
+            StopCoroutine(shakeRoutine);
+            shakeRoutine = null;
+        }
 
-        shakeTimer -= Time.unscaledDeltaTime;
-        float t = Mathf.Clamp01(shakeTimer / shakeDuration);
-        float strength = shakeStrength * t;
-        Vector3 offset = Random.insideUnitSphere * strength;
-        offset.z = 0f;
-        transform.localPosition = originalLocalPos + offset;
-
-        if (shakeTimer <= 0f)
-            transform.localPosition = originalLocalPos;
+        transform.localPosition = originalLocalPos;
+        shakeTimer = 0f;
     }
 
     public void Shake(float strength, float duration)
@@ -45,10 +44,31 @@ public class CameraShaker : MonoBehaviour
         shakeStrength = Mathf.Max(0f, strength);
         shakeDuration = Mathf.Max(0.01f, duration);
         shakeTimer = shakeDuration;
+
+        if (shakeRoutine != null)
+            StopCoroutine(shakeRoutine);
+        shakeRoutine = StartCoroutine(ShakeRoutine());
     }
 
     public void ShakeDefault()
     {
         Shake(defaultStrength, defaultDuration);
+    }
+
+    private IEnumerator ShakeRoutine()
+    {
+        while (shakeTimer > 0f)
+        {
+            shakeTimer -= Time.unscaledDeltaTime;
+            float t = Mathf.Clamp01(shakeTimer / shakeDuration);
+            float strength = shakeStrength * t;
+            Vector3 offset = Random.insideUnitSphere * strength;
+            offset.z = 0f;
+            transform.localPosition = originalLocalPos + offset;
+            yield return null;
+        }
+
+        transform.localPosition = originalLocalPos;
+        shakeRoutine = null;
     }
 }

@@ -59,12 +59,12 @@ public class InventoryManager : MonoBehaviour
         ResolveSaveSystem();
 
         BuildRelicLookupFromResources();
-        RebuildOwnedRelicsFromSave();
         SceneManager.sceneLoaded += HandleSceneLoaded;
     }
 
     private void Start()
     {
+        RebuildOwnedRelicsFromSave();
         TryApplyOwnedRelicsToCurrentPlayer();
     }
 
