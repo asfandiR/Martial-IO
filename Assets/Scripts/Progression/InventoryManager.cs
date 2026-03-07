@@ -89,6 +89,7 @@ public class InventoryManager : MonoBehaviour
     public RelicTransactionResult TryAddRelic(RelicData relic)
     {
         if (relic == null) return RelicTransactionResult.InvalidRelic;
+        if (ownedRelics.Contains(relic)) return RelicTransactionResult.AlreadyOwned;
 
         string relicId = GetRelicId(relic);
         if (string.IsNullOrWhiteSpace(relicId)) return RelicTransactionResult.InvalidRelic;
@@ -186,8 +187,7 @@ public class InventoryManager : MonoBehaviour
     public bool HasRelic(RelicData relic)
     {
         if (relic == null) return false;
-        string relicId = GetRelicId(relic);
-        return !string.IsNullOrWhiteSpace(relicId) && ownedRelicIdSet.Contains(relicId);
+        return ownedRelics.Contains(relic);
     }
 
     public bool HasRelicId(string relicId)
