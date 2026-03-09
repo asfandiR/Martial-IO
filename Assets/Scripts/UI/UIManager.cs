@@ -13,6 +13,7 @@ public class UIManager : MonoBehaviour
     [SerializeField] private GameObject hudScreen;
     [SerializeField] private GameObject levelUpScreen;
     [SerializeField] private GameObject deathScreen;
+    private bool gameStateSubscribed;
 
     private void Awake()
     {
@@ -37,24 +38,27 @@ public class UIManager : MonoBehaviour
             if (deathScreen != null)
                 UIPanelManager.Instance.RegisterPanel(DeathPanelId, deathScreen, UIPanelManager.PanelType.System);
         }
+
+        TrySubscribeGameState();
+        if (GameManager.Instance != null)
+            HandleStateChanged(GameManager.Instance.CurrentState);
     }
 
     private void OnDestroy()
     {
+        if (gameStateSubscribed && GameManager.Instance != null)
+        {
+            GameManager.Instance.OnStateChanged -= HandleStateChanged;
+            gameStateSubscribed = false;
+        }
+
         if (Instance == this)
             Instance = null;
     }
 
     private void OnEnable()
     {
-        if (GameManager.Instance != null)
-            GameManager.Instance.OnStateChanged += HandleStateChanged;
-    }
-
-    private void OnDisable()
-    {
-        if (GameManager.Instance != null)
-            GameManager.Instance.OnStateChanged -= HandleStateChanged;
+        TrySubscribeGameState();
     }
 
     private void HandleStateChanged(GameManager.GameState state)
@@ -90,8 +94,29 @@ public class UIManager : MonoBehaviour
 
     private void SetActiveScreen(bool hud, bool levelUp, bool death)
     {
-        if (hudScreen != null) hudScreen.SetActive(hud);
+        bool keepHudForLevelUp = levelUp && IsChildOf(levelUpScreen, hudScreen);
+        bool keepHudForDeath = death && IsChildOf(deathScreen, hudScreen);
+        bool finalHud = hud || keepHudForLevelUp || keepHudForDeath;
+
+        if (hudScreen != null) hudScreen.SetActive(finalHud);
         if (levelUpScreen != null) levelUpScreen.SetActive(levelUp);
         if (deathScreen != null) deathScreen.SetActive(death);
+    }
+
+    private void TrySubscribeGameState()
+    {
+        if (gameStateSubscribed || GameManager.Instance == null)
+            return;
+
+        GameManager.Instance.OnStateChanged += HandleStateChanged;
+        gameStateSubscribed = true;
+    }
+
+    private static bool IsChildOf(GameObject maybeChild, GameObject maybeParent)
+    {
+        if (maybeChild == null || maybeParent == null)
+            return false;
+
+        return maybeChild.transform.IsChildOf(maybeParent.transform);
     }
 }

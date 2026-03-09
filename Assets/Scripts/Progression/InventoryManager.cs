@@ -153,15 +153,19 @@ public class InventoryManager : MonoBehaviour
         if (string.IsNullOrWhiteSpace(relicId)) return false;
         if (!ownedRelicIdSet.Remove(relicId)) return false;
 
+        int removedCount = 0;
         for (int i = ownedRelics.Count - 1; i >= 0; i--)
         {
             if (ownedRelics[i] == null) continue;
-            if (string.Equals(GetRelicId(ownedRelics[i]), relicId, StringComparison.OrdinalIgnoreCase))
-            {
-                ownedRelics.RemoveAt(i);
-                break;
-            }
+            if (!string.Equals(GetRelicId(ownedRelics[i]), relicId, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            ownedRelics.RemoveAt(i);
+            removedCount++;
         }
+
+        if (removedCount <= 0)
+            return false;
 
         ResolveSaveSystem();
         saveSystem?.ClearOwnedRelics();
@@ -187,7 +191,7 @@ public class InventoryManager : MonoBehaviour
     public bool HasRelic(RelicData relic)
     {
         if (relic == null) return false;
-        return ownedRelics.Contains(relic);
+        return HasRelicId(GetRelicId(relic));
     }
 
     public bool HasRelicId(string relicId)

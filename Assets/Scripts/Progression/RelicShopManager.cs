@@ -43,8 +43,7 @@ public class RelicShopManager : MonoBehaviour
 
     private void Awake()
     {
-        if (inventoryManager == null)
-            inventoryManager = InventoryManager.Instance ?? FindFirstObjectByType<InventoryManager>();
+        ResolveInventoryManager();
 
         ResolveShopCells();
 
@@ -68,6 +67,8 @@ public class RelicShopManager : MonoBehaviour
 
     private void OnEnable()
     {
+        ResolveInventoryManager();
+
         if (refreshOffersOnEnable)
             GenerateOffers();
 
@@ -79,16 +80,15 @@ public class RelicShopManager : MonoBehaviour
     {
         if (inventoryManager != null)
             inventoryManager.OnWalletChanged -= HandleWalletChanged;
-
-        // Unregister from panel manager
-        if (UIPanelManager.Instance != null)
-            UIPanelManager.Instance.UnregisterPanel(PanelId);
     }
 
     private void OnDestroy()
     {
         if (buyButton != null)
             buyButton.onClick.RemoveListener(BuySelectedRelic);
+
+        if (UIPanelManager.Instance != null)
+            UIPanelManager.Instance.UnregisterPanel(PanelId);
     }
 
     public void GenerateOffers()
@@ -122,6 +122,8 @@ public class RelicShopManager : MonoBehaviour
 
     public void BuyRelic(int statIndex, int rarityIndex)
     {
+        ResolveInventoryManager();
+
         if (inventoryManager == null)
         {
             SetStatus("Inventory not found");
@@ -144,6 +146,8 @@ public class RelicShopManager : MonoBehaviour
 
     public void BuySelectedRelic()
     {
+        ResolveInventoryManager();
+
         if (inventoryManager == null)
         {
             SetStatus("Inventory not found");
@@ -182,6 +186,8 @@ public class RelicShopManager : MonoBehaviour
 
     public void SellRelic(RelicData relic)
     {
+        ResolveInventoryManager();
+
         if (inventoryManager == null || relic == null)
         {
             SetStatus("Sell failed");
@@ -355,6 +361,12 @@ public class RelicShopManager : MonoBehaviour
     private void HandleWalletChanged(int _)
     {
         RefreshBuyButtonState();
+    }
+
+    private void ResolveInventoryManager()
+    {
+        if (inventoryManager == null)
+            inventoryManager = InventoryManager.Instance ?? FindFirstObjectByType<InventoryManager>();
     }
 
     private static string GetRelicName(RelicData relic)

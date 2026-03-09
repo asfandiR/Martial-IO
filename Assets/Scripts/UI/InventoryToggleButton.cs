@@ -11,14 +11,13 @@ public class InventoryToggleButton : MonoBehaviour
     [SerializeField] private bool closeOnStart = true;
 
     private bool pausedByThisUI;
+    private RelicShopToggleButton cachedShopToggleButton;
 
     private void Start()
     {
         if (inventoryPanel != null)
         {
-            // Register panel with the manager
-            if (UIPanelManager.Instance != null)
-                UIPanelManager.Instance.RegisterPanel(PanelId, inventoryPanel, UIPanelManager.PanelType.Overlay);
+            EnsureRegistered();
 
             if (closeOnStart)
                 inventoryPanel.SetActive(false);
@@ -40,26 +39,23 @@ public class InventoryToggleButton : MonoBehaviour
     public void ToggleInventory()
     {
         if (inventoryPanel == null) return;
-        
-        if (UIPanelManager.Instance != null)
-        {
-            UIPanelManager.Instance.TogglePanel(PanelId);
-            HandlePauseState(inventoryPanel.activeSelf);
-        }
-        else
-        {
-            SetInventoryOpen(!inventoryPanel.activeSelf);
-        }
+
+        SetInventoryOpen(!inventoryPanel.activeSelf);
     }
 
     public void SetInventoryOpen(bool isOpen)
     {
         if (inventoryPanel == null) return;
 
+        if (isOpen)
+            CloseShopIfOpen();
+
         bool wasOpen = inventoryPanel.activeSelf;
         
         if (UIPanelManager.Instance != null)
         {
+            EnsureRegistered();
+
             if (isOpen)
                 UIPanelManager.Instance.OpenPanel(PanelId);
             else
@@ -78,8 +74,17 @@ public class InventoryToggleButton : MonoBehaviour
 
     private void HandleStateChanged(GameManager.GameState state)
     {
-        if (state != GameManager.GameState.Gameplay && inventoryPanel != null && inventoryPanel.activeSelf)
-            SetInventoryOpen(false);
+        if (inventoryPanel == null || !inventoryPanel.activeSelf)
+            return;
+
+        if (state == GameManager.GameState.Gameplay)
+            return;
+
+        // Keep panel open when this UI itself put the game in Pause.
+        if (state == GameManager.GameState.Pause && pausedByThisUI)
+            return;
+
+        SetInventoryOpen(false);
     }
 
     private void HandlePauseState(bool inventoryOpen)
@@ -101,4 +106,21 @@ public class InventoryToggleButton : MonoBehaviour
             pausedByThisUI = false;
         }
     }
+
+    private void EnsureRegistered()
+    {
+        if (UIPanelManager.Instance != null && inventoryPanel != null)
+            UIPanelManager.Instance.RegisterPanel(PanelId, inventoryPanel, UIPanelManager.PanelType.Overlay);
+    }
+
+    private void CloseShopIfOpen()
+    {
+        if (cachedShopToggleButton == null)
+            cachedShopToggleButton = FindFirstObjectByType<RelicShopToggleButton>();
+
+        if (cachedShopToggleButton != null && cachedShopToggleButton.IsShopOpen)
+            cachedShopToggleButton.SetShopOpen(false);
+    }
+
+    public bool IsInventoryOpen => inventoryPanel != null && inventoryPanel.activeSelf;
 }

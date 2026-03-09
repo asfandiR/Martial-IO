@@ -17,6 +17,7 @@ public class InventoryPanelUI : MonoBehaviour
     [SerializeField] private TMP_Text emptyText;
 
     private readonly List<InventoryRelicCellUI> spawnedCells = new List<InventoryRelicCellUI>(128);
+    private InventoryManager subscribedInventory;
 
     private void OnEnable()
     {
@@ -32,6 +33,8 @@ public class InventoryPanelUI : MonoBehaviour
     public void Refresh()
     {
         var inventory = InventoryManager.Instance;
+        RebindSubscriptions(inventory);
+
         if (inventory == null)
         {
             SetText(totalBoostText, "Inventory manager not found.");
@@ -111,6 +114,26 @@ public class InventoryPanelUI : MonoBehaviour
         }
 
         spawnedCells.Clear();
+
+        if (gridContent == null)
+            return;
+
+        InventoryRelicCellUI[] existingCells = gridContent.GetComponentsInChildren<InventoryRelicCellUI>(true);
+        for (int i = 0; i < existingCells.Length; i++)
+        {
+            InventoryRelicCellUI cell = existingCells[i];
+            if (cell == null)
+                continue;
+
+            bool isPrefabTemplateInScene = cellPrefab != null && cell.gameObject == cellPrefab.gameObject;
+            if (isPrefabTemplateInScene)
+            {
+                cell.gameObject.SetActive(false);
+                continue;
+            }
+
+            Destroy(cell.gameObject);
+        }
     }
 
     private static void SetText(TMP_Text target, string value)
@@ -121,24 +144,36 @@ public class InventoryPanelUI : MonoBehaviour
 
     private void Subscribe()
     {
-        if (InventoryManager.Instance != null)
-        {
-            InventoryManager.Instance.OnInventoryChanged += Refresh;
-            InventoryManager.Instance.OnWalletChanged += HandleWalletChanged;
-        }
+        RebindSubscriptions(InventoryManager.Instance);
     }
 
     private void Unsubscribe()
     {
-        if (InventoryManager.Instance != null)
-        {
-            InventoryManager.Instance.OnInventoryChanged -= Refresh;
-            InventoryManager.Instance.OnWalletChanged -= HandleWalletChanged;
-        }
+        RebindSubscriptions(null);
     }
 
     private void HandleWalletChanged(int _)
     {
         Refresh();
+    }
+
+    private void RebindSubscriptions(InventoryManager target)
+    {
+        if (subscribedInventory == target)
+            return;
+
+        if (subscribedInventory != null)
+        {
+            subscribedInventory.OnInventoryChanged -= Refresh;
+            subscribedInventory.OnWalletChanged -= HandleWalletChanged;
+        }
+
+        subscribedInventory = target;
+
+        if (subscribedInventory != null)
+        {
+            subscribedInventory.OnInventoryChanged += Refresh;
+            subscribedInventory.OnWalletChanged += HandleWalletChanged;
+        }
     }
 }
