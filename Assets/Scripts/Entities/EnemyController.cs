@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections;
+using System.Collections.Generic;
 using UnityEngine;
 
 // Enemy AI controller.
@@ -62,6 +63,7 @@ public class EnemyController : MonoBehaviour
     private Vector2 desiredVelocity;
     private float hitBloodCooldownTimer;
     private float stainCooldownTimer;
+    private readonly HashSet<int> warnedMissingAnimatorStates = new HashSet<int>();
 
     private void Awake()
     {
@@ -252,6 +254,14 @@ public class EnemyController : MonoBehaviour
 
         if (!forceRestart && string.Equals(lastPlayedClipName, clipName, StringComparison.Ordinal))
             return true;
+
+        int stateHash = Animator.StringToHash(clipName);
+        if (!animator.HasState(0, stateHash))
+        {
+            if (warnedMissingAnimatorStates.Add(stateHash))
+                Debug.LogWarning($"[EnemyController] Animator state not found: '{clipName}' on '{name}'.");
+            return false;
+        }
 
         animator.Play(clipName, 0, 0f);
         lastPlayedClipName = clipName;
@@ -445,13 +455,13 @@ public class EnemyController : MonoBehaviour
     private void SpawnXpGem()
     {
         if (xpGemPrefab == null) return;
-        if (ObjectPooler.Instance == null) return;
 
-        ObjectPooler.Instance.Get(
-            xpGemPrefab,
-            transform.position,
-            Quaternion.identity
-        );
+        GameObject gem = null;
+        if (ObjectPooler.Instance != null)
+            gem = ObjectPooler.Instance.Get(xpGemPrefab, transform.position, Quaternion.identity);
+
+        if (gem == null)
+            Instantiate(xpGemPrefab, transform.position, Quaternion.identity);
     }
 
     public void Configure(EnemyData data, float difficultyMultiplier)

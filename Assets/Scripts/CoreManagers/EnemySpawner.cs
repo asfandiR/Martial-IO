@@ -28,6 +28,7 @@ public class EnemySpawner : MonoBehaviour
     private int phaseIndex;
     private LevelManager levelManager;
     private bool warnedPoolMissing;
+    private bool warnedPoolUnavailable;
 
     private readonly List<int> difficultyPhases = new List<int>(16);
     private readonly List<List<EnemyData>> enemiesByPhase = new List<List<EnemyData>>(16);
@@ -154,13 +155,23 @@ public class EnemySpawner : MonoBehaviour
         {
             enemy = ObjectPooler.Instance.Get(data.prefab, pos, rot);
         }
-        else
+
+        if (enemy == null)
         {
-            if (!warnedPoolMissing)
+            if (ObjectPooler.Instance == null)
             {
-                warnedPoolMissing = true;
-                Debug.LogWarning("[EnemySpawner] ObjectPooler missing, instantiating enemies.");
+                if (!warnedPoolMissing)
+                {
+                    warnedPoolMissing = true;
+                    Debug.LogWarning("[EnemySpawner] ObjectPooler missing, instantiating enemies.");
+                }
             }
+            else if (!warnedPoolUnavailable)
+            {
+                warnedPoolUnavailable = true;
+                Debug.LogWarning("[EnemySpawner] Pool unavailable for this enemy prefab, falling back to Instantiate.");
+            }
+
             enemy = Instantiate(data.prefab, pos, rot);
         }
 

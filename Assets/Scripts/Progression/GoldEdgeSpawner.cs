@@ -20,6 +20,7 @@ public class GoldEdgeSpawner : MonoBehaviour
     [SerializeField] private float extraInset;
 
     private bool warnedPoolMissing;
+    private bool warnedPoolUnavailable;
     private Coroutine spawnRoutine;
 
     private void Awake()
@@ -108,13 +109,23 @@ public class GoldEdgeSpawner : MonoBehaviour
         {
             goldInstance = ObjectPooler.Instance.Get(goldPrefab, position, rotation);
         }
-        else
+
+        if (goldInstance == null)
         {
-            if (!warnedPoolMissing)
+            if (ObjectPooler.Instance == null)
             {
-                warnedPoolMissing = true;
-                Debug.LogWarning("[GoldEdgeSpawner] ObjectPooler missing, using Instantiate for gold pickups.");
+                if (!warnedPoolMissing)
+                {
+                    warnedPoolMissing = true;
+                    Debug.LogWarning("[GoldEdgeSpawner] ObjectPooler missing, using Instantiate for gold pickups.");
+                }
             }
+            else if (!warnedPoolUnavailable)
+            {
+                warnedPoolUnavailable = true;
+                Debug.LogWarning("[GoldEdgeSpawner] Pool unavailable for gold prefab, using Instantiate.");
+            }
+
             goldInstance = Instantiate(goldPrefab, position, rotation);
         }
 

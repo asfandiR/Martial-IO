@@ -8,8 +8,11 @@ using System.Collections.Generic;
 // - shows only rarity on slot buttons
 // - shows full data in detail panel on click
 // - buys selected relic via one buy button on detail panel
+// - integrates with UIPanelManager for overlay hierarchy
 public class RelicShopManager : MonoBehaviour
 {
+    private const string PanelId = "RelicShopPanel";
+
     [Header("References")]
     [SerializeField] private InventoryManager inventoryManager;
     [SerializeField] private RectTransform shopSlotsRoot;
@@ -55,6 +58,14 @@ public class RelicShopManager : MonoBehaviour
         SetSelectedRelic(null);
     }
 
+    private void Start()
+    {
+        // Register panel with the manager
+        GameObject shopPanel = gameObject;
+        if (UIPanelManager.Instance != null)
+            UIPanelManager.Instance.RegisterPanel(PanelId, shopPanel, UIPanelManager.PanelType.Overlay);
+    }
+
     private void OnEnable()
     {
         if (refreshOffersOnEnable)
@@ -68,6 +79,10 @@ public class RelicShopManager : MonoBehaviour
     {
         if (inventoryManager != null)
             inventoryManager.OnWalletChanged -= HandleWalletChanged;
+
+        // Unregister from panel manager
+        if (UIPanelManager.Instance != null)
+            UIPanelManager.Instance.UnregisterPanel(PanelId);
     }
 
     private void OnDestroy()

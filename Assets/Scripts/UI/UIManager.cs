@@ -1,8 +1,13 @@
 using UnityEngine;
 
 // Handles HUD and menus.
+// Integrates with UIPanelManager to manage system UI panels.
 public class UIManager : MonoBehaviour
 {
+    private const string HudPanelId = "HUDPanel";
+    private const string LevelUpPanelId = "LevelUpPanel";
+    private const string DeathPanelId = "DeathPanel";
+
     public static UIManager Instance { get; private set; }
 
     [SerializeField] private GameObject hudScreen;
@@ -18,6 +23,20 @@ public class UIManager : MonoBehaviour
         }
 
         Instance = this;
+    }
+
+    private void Start()
+    {
+        // Register system panels with the manager
+        if (UIPanelManager.Instance != null)
+        {
+            if (hudScreen != null)
+                UIPanelManager.Instance.RegisterPanel(HudPanelId, hudScreen, UIPanelManager.PanelType.System);
+            if (levelUpScreen != null)
+                UIPanelManager.Instance.RegisterPanel(LevelUpPanelId, levelUpScreen, UIPanelManager.PanelType.System);
+            if (deathScreen != null)
+                UIPanelManager.Instance.RegisterPanel(DeathPanelId, deathScreen, UIPanelManager.PanelType.System);
+        }
     }
 
     private void OnDestroy()
@@ -36,11 +55,6 @@ public class UIManager : MonoBehaviour
     {
         if (GameManager.Instance != null)
             GameManager.Instance.OnStateChanged -= HandleStateChanged;
-    }
-
-    private void Start()
-    {
-        SetActiveScreen(hud: true, levelUp: false, death: false);
     }
 
     private void HandleStateChanged(GameManager.GameState state)

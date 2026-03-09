@@ -22,6 +22,7 @@ public class EffectorEdgeSpawner : MonoBehaviour
     [SerializeField] private float extraInset;
 
     private bool warnedPoolMissing;
+    private bool warnedPoolUnavailable;
     private Coroutine spawnRoutine;
 
     private void Awake()
@@ -116,13 +117,23 @@ public class EffectorEdgeSpawner : MonoBehaviour
         {
             effectorInstance = ObjectPooler.Instance.Get(effectorPrefab, position, rotation);
         }
-        else
+
+        if (effectorInstance == null)
         {
-            if (!warnedPoolMissing)
+            if (ObjectPooler.Instance == null)
             {
-                warnedPoolMissing = true;
-                Debug.LogWarning("[EffectorEdgeSpawner] ObjectPooler missing, using Instantiate for effectors.");
+                if (!warnedPoolMissing)
+                {
+                    warnedPoolMissing = true;
+                    Debug.LogWarning("[EffectorEdgeSpawner] ObjectPooler missing, using Instantiate for effectors.");
+                }
             }
+            else if (!warnedPoolUnavailable)
+            {
+                warnedPoolUnavailable = true;
+                Debug.LogWarning("[EffectorEdgeSpawner] Pool unavailable for effector prefab, using Instantiate.");
+            }
+
             effectorInstance = Instantiate(effectorPrefab, position, rotation);
         }
 
